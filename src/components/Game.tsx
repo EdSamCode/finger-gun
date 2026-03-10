@@ -1489,123 +1489,165 @@ export default function Game() {
 
       {/* ── Ready — Selección de modo ── */}
       {phase === 'ready' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black via-gray-950 to-black text-white px-4 py-6 overflow-y-auto">
-          <div className="w-full max-w-lg">
+        <div className="absolute inset-0 flex flex-col bg-black text-white overflow-hidden select-none">
 
-            {/* Header */}
-            <div className="text-center mb-7">
-              <div className="text-5xl mb-3">🎯</div>
-              <h1 className="text-3xl font-black tracking-widest text-orange-400">FINGER GUN</h1>
-              <p className="text-gray-600 text-[11px] mt-1 tracking-widest uppercase">Elige tu modo</p>
-            </div>
+          {/* Header — minimal, floating */}
+          <div className="absolute top-0 left-0 right-0 z-10 pt-7 text-center pointer-events-none">
+            <p className="text-[10px] tracking-[0.45em] text-gray-600 uppercase mb-1">Elige tu modo</p>
+            <h1 className="text-xl font-black tracking-[0.2em] text-white">FINGER GUN</h1>
+          </div>
 
-            {/* Mode cards */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-5">
+          {/* Split panels */}
+          <div className="flex-1 flex">
 
-              {/* ── CLÁSICO ── */}
+            {/* ── CLÁSICO (izquierda) ── */}
+            <div
+              onClick={() => setSelectedMode('classic')}
+              className="relative flex-1 flex flex-col items-center justify-center cursor-pointer transition-all duration-500 overflow-hidden"
+              style={{
+                background: selectedMode === 'classic'
+                  ? 'radial-gradient(ellipse at 60% 50%, rgba(249,115,22,0.22) 0%, rgba(0,0,0,1) 72%)'
+                  : 'radial-gradient(ellipse at 60% 50%, rgba(249,115,22,0.05) 0%, rgba(0,0,0,1) 72%)',
+              }}
+            >
+              {/* Separador vertical */}
+              <div className="absolute right-0 top-[20%] bottom-[20%] w-px bg-gray-800/60" />
+
+              {/* Contenido */}
               <div
-                onClick={() => setSelectedMode('classic')}
-                className={`flex-1 rounded-2xl p-5 cursor-pointer transition-all duration-200 border-2 relative select-none ${
-                  selectedMode === 'classic'
-                    ? 'border-orange-500 bg-orange-500/10 shadow-lg shadow-orange-500/20'
-                    : 'border-gray-800 bg-gray-900/60 hover:border-gray-600 active:scale-[0.98]'
-                }`}
+                className="flex flex-col items-center transition-all duration-500"
+                style={{
+                  opacity:   selectedMode === 'classic' ? 1 : 0.28,
+                  transform: selectedMode === 'classic' ? 'scale(1.08)' : 'scale(0.96)',
+                }}
               >
-                {selectedMode === 'classic' && (
-                  <span className="absolute top-3 right-3 bg-orange-500 text-black text-[10px] font-black px-2 py-0.5 rounded-full tracking-wider">✓ SELECCIONADO</span>
-                )}
-                <div className="text-3xl mb-3">🏺</div>
-                <p className="font-black text-base mb-1 text-white">CLÁSICO</p>
-                <p className="text-gray-400 text-xs leading-relaxed">
-                  5 niveles. Botellas, latas y globos.<br/>Dificultad creciente.
-                </p>
+                <div className="text-6xl sm:text-7xl mb-5">🏺</div>
+                <h2
+                  className="text-2xl sm:text-3xl font-black tracking-widest mb-2"
+                  style={{ color: selectedMode === 'classic' ? '#fb923c' : '#6b7280' }}
+                >
+                  CLÁSICO
+                </h2>
+                <p className="text-[11px] tracking-widest text-gray-600 uppercase">5 niveles · Dificultad creciente</p>
               </div>
 
-              {/* ── MIS FOTOS ── */}
-              <div
-                onClick={() => setSelectedMode('photo')}
-                className={`flex-1 rounded-2xl p-5 cursor-pointer transition-all duration-200 border-2 relative select-none ${
-                  selectedMode === 'photo'
-                    ? 'border-purple-500 bg-purple-500/10 shadow-lg shadow-purple-500/20'
-                    : 'border-gray-800 bg-gray-900/60 hover:border-gray-600 active:scale-[0.98]'
-                }`}
-              >
-                {selectedMode === 'photo' && (
-                  <span className="absolute top-3 right-3 bg-purple-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full tracking-wider">✓ SELECCIONADO</span>
-                )}
-                <div className="text-3xl mb-3">📸</div>
-                <p className="font-black text-base mb-1 text-white">MIS FOTOS</p>
-                <p className="text-gray-400 text-xs leading-relaxed mb-3">
-                  Dispara tus fotos favoritas. Hasta {MAX_PHOTOS} imágenes. ¡Arrastra o sube!
-                </p>
-
-                {/* Upload zone — label+id es más fiable que label-wrapping en móvil */}
-                <div onClick={e => e.stopPropagation()}>
-                  <input
-                    id="ready-photo-input"
-                    ref={uploadInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={handlePhotoUpload}
-                  />
-                  <label
-                    htmlFor="ready-photo-input"
-                    style={{ touchAction: 'manipulation' }}
-                    className={`block cursor-pointer rounded-xl border-2 border-dashed py-4 px-3 text-center transition-colors ${
-                      numPhotos > 0
-                        ? 'border-purple-500/50 bg-purple-900/20'
-                        : 'border-gray-700 hover:border-purple-500/40 active:bg-purple-900/10'
-                    }`}
-                  >
-                    {numPhotos === 0 ? (
-                      <p className="text-gray-500 text-xs leading-relaxed">
-                        📷 {IS_MOBILE
-                          ? 'Toca aquí para elegir fotos de tu galería'
-                          : 'Haz clic o arrastra imágenes aquí'}
-                      </p>
-                    ) : (
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-purple-400 font-bold text-xs">
-                          {numPhotos}/{MAX_PHOTOS} foto{numPhotos !== 1 ? 's' : ''} lista{numPhotos !== 1 ? 's' : ''} ✓
-                        </p>
-                        {numPhotos < MAX_PHOTOS && (
-                          <p className="text-gray-600 text-[11px]">+ añadir</p>
-                        )}
-                      </div>
-                    )}
-                  </label>
+              {/* Indicador seleccionado */}
+              {selectedMode === 'classic' && (
+                <div className="absolute bottom-8 flex gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
                 </div>
+              )}
+            </div>
 
+            {/* ── MIS FOTOS (derecha) ── */}
+            <div
+              onClick={() => setSelectedMode('photo')}
+              className="relative flex-1 flex flex-col items-center justify-center cursor-pointer transition-all duration-500 overflow-hidden"
+              style={{
+                background: selectedMode === 'photo'
+                  ? 'radial-gradient(ellipse at 40% 50%, rgba(168,85,247,0.22) 0%, rgba(0,0,0,1) 72%)'
+                  : 'radial-gradient(ellipse at 40% 50%, rgba(168,85,247,0.05) 0%, rgba(0,0,0,1) 72%)',
+              }}
+            >
+              {/* Contenido principal */}
+              <div
+                className="flex flex-col items-center transition-all duration-500"
+                style={{
+                  opacity:   selectedMode === 'photo' ? 1 : 0.28,
+                  transform: selectedMode === 'photo' ? 'scale(1.08)' : 'scale(0.96)',
+                }}
+              >
+                <div className="text-6xl sm:text-7xl mb-5">📸</div>
+                <h2
+                  className="text-2xl sm:text-3xl font-black tracking-widest mb-2"
+                  style={{ color: selectedMode === 'photo' ? '#c084fc' : '#6b7280' }}
+                >
+                  MIS FOTOS
+                </h2>
+                <p className="text-[11px] tracking-widest text-gray-600 uppercase">Hasta {MAX_PHOTOS} imágenes · 3 olas</p>
+              </div>
+
+              {/* Upload zone — aparece solo cuando está seleccionado */}
+              <div
+                className="absolute bottom-16 left-4 right-4 transition-all duration-400"
+                style={{
+                  opacity:   selectedMode === 'photo' ? 1 : 0,
+                  transform: selectedMode === 'photo' ? 'translateY(0)' : 'translateY(8px)',
+                  pointerEvents: selectedMode === 'photo' ? 'all' : 'none',
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <input
+                  id="ready-photo-input"
+                  ref={uploadInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
+                <label
+                  htmlFor="ready-photo-input"
+                  style={{ touchAction: 'manipulation' }}
+                  className={`block cursor-pointer rounded-2xl border border-dashed py-3 px-4 text-center transition-all duration-200 ${
+                    numPhotos > 0
+                      ? 'border-purple-500/50 bg-purple-950/40'
+                      : 'border-gray-700/70 hover:border-purple-500/40 active:bg-purple-950/20'
+                  }`}
+                >
+                  {numPhotos === 0 ? (
+                    <p className="text-gray-500 text-xs tracking-wide">
+                      {IS_MOBILE ? '📷 Toca para elegir fotos' : '📷 Clic o arrastra fotos aquí'}
+                    </p>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-purple-400 text-xs font-bold tracking-wide">
+                        {numPhotos}/{MAX_PHOTOS} fotos ✓
+                      </span>
+                      {numPhotos < MAX_PHOTOS && (
+                        <span className="text-gray-600 text-[11px]">+ añadir</span>
+                      )}
+                    </div>
+                  )}
+                </label>
                 {numPhotos > 0 && (
                   <button
                     onClick={e => { e.stopPropagation(); clearPhotos() }}
-                    className="mt-2 text-gray-600 text-[11px] hover:text-red-400 transition-colors"
+                    className="mt-1.5 w-full text-center text-gray-700 text-[10px] tracking-widest hover:text-red-500 transition-colors uppercase"
                   >
-                    × borrar fotos
+                    × Borrar fotos
                   </button>
                 )}
               </div>
-            </div>
 
-            {/* Play button */}
+              {/* Indicador seleccionado */}
+              {selectedMode === 'photo' && (
+                <div className="absolute bottom-8 flex gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Botón JUGAR — flotante, centrado abajo */}
+          <div className="absolute bottom-0 left-0 right-0 pb-9 flex flex-col items-center gap-2.5 pointer-events-none">
             <button
               onClick={handlePlay}
               disabled={selectedMode === 'photo' && numPhotos === 0}
-              className={`w-full font-black text-xl py-4 rounded-2xl transition-all active:scale-[0.97] mb-2 ${
+              style={{ pointerEvents: 'all' }}
+              className={`font-black text-base tracking-[0.25em] px-14 py-4 rounded-full transition-all duration-200 active:scale-95 ${
                 selectedMode === 'photo' && numPhotos === 0
-                  ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                  ? 'bg-gray-900/80 text-gray-600 cursor-not-allowed backdrop-blur-sm border border-gray-800'
                   : selectedMode === 'photo'
-                    ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/30'
-                    : 'bg-orange-500 hover:bg-orange-400 text-black shadow-lg shadow-orange-500/30'
+                    ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_40px_rgba(168,85,247,0.45)]'
+                    : 'bg-orange-500 hover:bg-orange-400 text-black shadow-[0_0_40px_rgba(249,115,22,0.45)]'
               }`}
             >
-              {selectedMode === 'photo' && numPhotos === 0 ? 'SUBE AL MENOS 1 FOTO' : '¡JUGAR!'}
+              {selectedMode === 'photo' && numPhotos === 0 ? 'SUBE UNA FOTO' : 'JUGAR'}
             </button>
-            <p className="text-center text-gray-700 text-[11px] tracking-widest">ESPACIO · ENTER</p>
-
+            <p className="text-gray-800 text-[9px] tracking-[0.4em] uppercase">Espacio · Enter</p>
           </div>
+
         </div>
       )}
 
