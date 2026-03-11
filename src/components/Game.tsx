@@ -1117,6 +1117,11 @@ export default function Game() {
     let lastTs = performance.now()
 
     const loop = (ts: number) => {
+      // Siempre re-programamos el siguiente frame, incluso si hay excepción
+      rafRef.current = requestAnimationFrame(loop)
+
+      try {
+
       const dt = Math.min((ts - lastTs) / 1000, 0.05)
       lastTs = ts
       timeRef.current += dt
@@ -1124,10 +1129,7 @@ export default function Game() {
       const canvas = canvasRef.current
       const video  = videoRef.current
       const hl     = handLandmarkerRef.current
-      if (!canvas || !video || !hl) {
-        rafRef.current = requestAnimationFrame(loop)
-        return
-      }
+      if (!canvas || !video || !hl) return
 
       // Resize canvas to actual display size (handles device rotation)
       const newCW = canvas.offsetWidth
@@ -1156,8 +1158,8 @@ export default function Game() {
       const W = canvas.width, H = canvas.height
 
       frameCountRef.current++
-      // ── Hand detection — máximo 10fps (100ms entre inferences) para evitar freeze ──
-      if (video.readyState >= 2 && ts - lastMPTsRef.current >= 100) {
+      // ── Hand detection — máximo ~15fps (65ms entre inferences) ──
+      if (video.readyState >= 2 && ts - lastMPTsRef.current >= 65) {
         lastMPTsRef.current = ts
         try {
           const results = hl.detectForVideo(video, ts)
@@ -1387,7 +1389,10 @@ export default function Game() {
         ctx.restore()
       }
 
-      rafRef.current = requestAnimationFrame(loop)
+      } catch (err) {
+        console.error('[FingerGun] error en game loop:', err)
+        // El siguiente frame ya fue programado arriba — el juego continúa
+      }
     }
 
     rafRef.current = requestAnimationFrame(loop)
