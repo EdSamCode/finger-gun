@@ -1218,9 +1218,9 @@ export default function Game() {
             t.y = Math.max(t.h / 2 + 20, Math.min(H - t.h / 2 - 20, t.y))
           }
         }
-        // Balloon float
+        // Balloon float — phase offset normalizado para evitar saltos erráticos
         if (t.type === 'balloon') {
-          t.y = t.baseY + Math.sin(timeRef.current * 1.5 + t.id) * 15
+          t.y = t.baseY + Math.sin(timeRef.current * 1.5 + (t.id % 10)) * 14
         }
         return true
       })
@@ -1321,16 +1321,6 @@ export default function Game() {
 
       // Background
       drawBackground(ctx, W, H, timeRef.current)
-
-      // Camera feed (mirrored, subtle background) — omitido en mobile, throttled a cada 2do frame en desktop
-      if (video.readyState >= 2 && !IS_MOBILE && frameCountRef.current % 2 === 0) {
-        ctx.save()
-        ctx.globalAlpha = 0.13
-        ctx.translate(W, 0)
-        ctx.scale(-1, 1)
-        ctx.drawImage(video, 0, 0, W, H)
-        ctx.restore()
-      }
 
       // Targets
       targetsRef.current.forEach(t => {
@@ -1445,18 +1435,23 @@ export default function Game() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Hidden video */}
-      {/* Video off-screen pero no display:none — iOS necesita que sea "visible" para capturar frames */}
+      {/* Video — se muestra como fondo CSS durante el juego (sin tocar la GPU del canvas) */}
       <video
         ref={videoRef}
-        className="absolute -top-full -left-full w-px h-px opacity-0 pointer-events-none"
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        style={{
+          opacity: (phase === 'playing' || phase === 'photoLevel') && !IS_MOBILE ? 0.12 : 0,
+          transform: 'scaleX(-1)',           // espejo para cámara frontal
+          objectFit: 'cover',
+          zIndex: 0,
+        }}
         playsInline
         muted
         autoPlay
       />
 
-      {/* Game canvas */}
-      <canvas ref={canvasRef} className="w-full h-full" />
+      {/* Game canvas — z-index encima del video */}
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ zIndex: 1 }} />
 
       {/* ── Loading ── */}
       {phase === 'loading' && (
