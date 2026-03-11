@@ -1450,8 +1450,8 @@ export default function Game() {
         autoPlay
       />
 
-      {/* Game canvas — z-index encima del video */}
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ zIndex: 1 }} />
+      {/* Game canvas — z-index encima del video, pointerEvents none para no bloquear UI */}
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ zIndex: 1, pointerEvents: 'none' }} />
 
       {/* ── Loading ── */}
       {phase === 'loading' && (
