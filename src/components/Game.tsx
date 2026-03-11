@@ -233,7 +233,7 @@ function spawnPhotoLevel(photoCount: number, canvasW: number, canvasH: number, w
 
 function spawnParticles(x: number, y: number, type: TargetType): Particle[] {
   const particles: Particle[] = []
-  const count = type === 'balloon' ? 12 : 20
+  const count = type === 'balloon' ? 8 : 12
   const color = getTargetColor(type)
 
   for (let i = 0; i < count; i++) {
@@ -254,7 +254,7 @@ function spawnParticles(x: number, y: number, type: TargetType): Particle[] {
     })
   }
   // Smoke puffs
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 3; i++) {
     particles.push({
       x: x + randBetween(-15, 15),
       y: y + randBetween(-10, 10),
@@ -407,7 +407,7 @@ function drawCrosshair(
       : `hsl(${openness * 60 + 10}, 100%, 55%)` // transición naranja→amarillo→verde
 
   ctx.shadowColor = color
-  ctx.shadowBlur  = IS_MOBILE ? (justShot ? 12 : 5) : (justShot ? 40 : 18)
+  ctx.shadowBlur  = IS_MOBILE ? (justShot ? 12 : 5) : (justShot ? 20 : 8)
 
   // Anillo exterior
   ctx.strokeStyle = color
@@ -1155,8 +1155,8 @@ export default function Game() {
       const W = canvas.width, H = canvas.height
 
       frameCountRef.current++
-      // ── Hand detection — cada 2 frames en TODOS los dispositivos para evitar freeze ──
-      if (video.readyState >= 2 && frameCountRef.current % 2 === 0) {
+      // ── Hand detection — cada 3 frames en TODOS los dispositivos para evitar freeze ──
+      if (video.readyState >= 2 && frameCountRef.current % 3 === 0) {
         try {
           const results = hl.detectForVideo(video, ts)
           const detectedCount = results.landmarks?.length ?? 0
@@ -1282,8 +1282,8 @@ export default function Game() {
       // ── Timer: en modo foto, tiempo agotado = fin (sin perder vidas) ──
       // (La lógica de timer normal ya está arriba; aquí sólo sobreescribimos el comportamiento)
 
-      // ── Update particles ──
-      particlesRef.current = particlesRef.current.filter(p => p.life > 0)
+      // ── Update particles (cap en 60 para evitar saturación GPU) ──
+      particlesRef.current = particlesRef.current.filter(p => p.life > 0).slice(-60)
       particlesRef.current.forEach(p => {
         p.x += p.vx * dt
         p.y += p.vy * dt
@@ -1315,8 +1315,8 @@ export default function Game() {
       // Background
       drawBackground(ctx, W, H, timeRef.current)
 
-      // Camera feed (mirrored, subtle background) — omitido en mobile para rendimiento
-      if (video.readyState >= 2 && !IS_MOBILE) {
+      // Camera feed (mirrored, subtle background) — omitido en mobile, throttled a cada 2do frame en desktop
+      if (video.readyState >= 2 && !IS_MOBILE && frameCountRef.current % 2 === 0) {
         ctx.save()
         ctx.globalAlpha = 0.13
         ctx.translate(W, 0)
@@ -1396,6 +1396,11 @@ export default function Game() {
     startLevel(next)
     setPhase('playing')
   }, [startLevel])
+
+  const goToMenu = useCallback(() => {
+    cancelAnimationFrame(rafRef.current)
+    setPhase('ready')
+  }, [])
 
   // ── Iniciar según modo seleccionado ──────────────────────────────────────
 
@@ -1660,9 +1665,15 @@ export default function Game() {
           <p className="text-gray-400 mb-8">pts acumulados</p>
           <button
             onClick={goNextLevel}
-            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-xl px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40"
+            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-xl px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40 mb-4"
           >
             NIVEL {Math.min(levelRef.current + 1, LEVELS.length)} →
+          </button>
+          <button
+            onClick={goToMenu}
+            className="text-gray-500 hover:text-white text-sm tracking-widest transition-colors"
+          >
+            ← MENÚ PRINCIPAL
           </button>
         </div>
       )}
@@ -1683,6 +1694,12 @@ export default function Game() {
             className="bg-orange-500 hover:bg-orange-400 text-black font-black text-xl px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40 mb-4"
           >
             JUGAR DE NUEVO
+          </button>
+          <button
+            onClick={goToMenu}
+            className="text-gray-500 hover:text-white text-sm tracking-widest transition-colors"
+          >
+            ← MENÚ PRINCIPAL
           </button>
         </div>
       )}
@@ -1752,7 +1769,7 @@ export default function Game() {
           </p>
           <p className="text-6xl font-black mb-1">{finalScore.toString().padStart(7, '0')}</p>
           <p className="text-gray-400 mb-8">puntos totales</p>
-          <div className="flex gap-4">
+          <div className="flex gap-4 mb-5">
             <button
               onClick={startPhotoLevel}
               className="bg-purple-600 hover:bg-purple-500 text-white font-black text-lg px-8 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-purple-500/40"
@@ -1766,6 +1783,12 @@ export default function Game() {
               🎮 JUEGO NORMAL
             </button>
           </div>
+          <button
+            onClick={goToMenu}
+            className="text-gray-500 hover:text-white text-sm tracking-widest transition-colors"
+          >
+            ← MENÚ PRINCIPAL
+          </button>
         </div>
       )}
     </div>
