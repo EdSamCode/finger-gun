@@ -789,7 +789,8 @@ export default function Game() {
   const timeRef         = useRef(0)
   const handLandmarkerRef = useRef<any>(null)
   const screenShakeRef    = useRef(0)
-  const frameCountRef     = useRef(0)         // para throttle de MediaPipe en mobile
+  const frameCountRef     = useRef(0)         // para throttle de cámara
+  const lastMPTsRef       = useRef(0)         // timestamp del último inference de MediaPipe (ms)
   const prevCanvasSizeRef = useRef({ w: 0, h: 0 }) // para detectar rotación de pantalla
   const photoWaveRef      = useRef(1)         // ola actual en modo foto
 
@@ -1155,8 +1156,9 @@ export default function Game() {
       const W = canvas.width, H = canvas.height
 
       frameCountRef.current++
-      // ── Hand detection — cada 3 frames en TODOS los dispositivos para evitar freeze ──
-      if (video.readyState >= 2 && frameCountRef.current % 3 === 0) {
+      // ── Hand detection — máximo 10fps (100ms entre inferences) para evitar freeze ──
+      if (video.readyState >= 2 && ts - lastMPTsRef.current >= 100) {
+        lastMPTsRef.current = ts
         try {
           const results = hl.detectForVideo(video, ts)
           const detectedCount = results.landmarks?.length ?? 0
@@ -1183,10 +1185,13 @@ export default function Game() {
         } catch { /* ignorar errores de frame */ }
       }
 
-      // ── Shoot (ambas manos independientes) ──
-      for (const g of gesturesRef.current) {
-        if (g.justShot) handleShot(g.aimX, g.aimY)
-      }
+      // ── Shoot (ambas manos) — limpiamos justShot inmediatamente para evitar disparo múltiple ──
+      gesturesRef.current.forEach((g, hi) => {
+        if (g.justShot) {
+          handleShot(g.aimX, g.aimY)
+          gesturesRef.current[hi] = { ...g, justShot: false }
+        }
+      })
 
       // ── Update targets ──
       const cfg = LEVELS[Math.min(levelRef.current - 1, LEVELS.length - 1)]
