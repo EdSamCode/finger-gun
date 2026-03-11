@@ -816,7 +816,7 @@ export default function Game() {
         const { HandLandmarker } = await import('@mediapipe/tasks-vision')
         const MODEL_URL =
           'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
-        const baseOpts = { numHands: 2, runningMode: 'VIDEO' as const, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 }
+        const baseOpts = { numHands: 1, runningMode: 'VIDEO' as const, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 }
 
         // Try GPU first (faster), fallback to CPU for mobile Safari / older devices
         try {
@@ -856,9 +856,10 @@ export default function Game() {
       return
     }
     try {
-      // Sin restricciones de resolución — iOS falla con ideal widths a veces
+      // 640×480 ideal — MediaPipe procesa 4× más rápido que 1280×720
+      // "ideal" es no-obligatorio: si el dispositivo no soporta esa resolución usa la más cercana
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30, max: 30 } },
         audio: false,
       })
       const video = videoRef.current
@@ -1158,8 +1159,8 @@ export default function Game() {
       const W = canvas.width, H = canvas.height
 
       frameCountRef.current++
-      // ── Hand detection — máximo ~15fps (65ms entre inferences) ──
-      if (video.readyState >= 2 && ts - lastMPTsRef.current >= 65) {
+      // ── Hand detection — máximo ~8fps (120ms entre inferences) para no bloquear el hilo principal ──
+      if (video.readyState >= 2 && ts - lastMPTsRef.current >= 120) {
         lastMPTsRef.current = ts
         try {
           const results = hl.detectForVideo(video, ts)
