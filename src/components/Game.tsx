@@ -37,6 +37,8 @@ interface Target {
   // visual
   color: string
   points: number
+  // PERF: canvas pre-renderizado para evitar createGradient en el RAF hot path
+  cachedCanvas?: HTMLCanvasElement
 }
 
 interface Particle {
@@ -117,6 +119,35 @@ const IS_MOBILE = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/
 
 let nextId = 1
 
+// ─── Pre-render target a offscreen canvas ─────────────────────────────────────
+// Elimina createLinearGradient/createRadialGradient del RAF hot path (60fps).
+// La GC de estos objetos en cada frame es la principal causa de jank y freezes.
+function prerenderTarget(type: TargetType, w: number, h: number, color: string): HTMLCanvasElement | undefined {
+  if (typeof document === 'undefined') return undefined
+  const pad = 4
+  const r   = w / 2
+
+  // El canvas de globo debe incluir la cuerda que cuelga debajo del centro
+  const cw = w + pad * 2
+  const ch = type === 'balloon' ? Math.ceil(r * 2.2 + 30) + pad * 2 : h + pad * 2
+
+  const offscreen = document.createElement('canvas')
+  offscreen.width  = cw
+  offscreen.height = ch
+  const ctx = offscreen.getContext('2d')
+  if (!ctx) return undefined
+
+  if (type === 'bottle') {
+    drawBottle(ctx, cw / 2, ch / 2, w, h, color, 1)
+  } else if (type === 'can') {
+    drawCan(ctx, cw / 2, ch / 2, w, h, color, 1)
+  } else if (type === 'balloon') {
+    // t=0 → bob interno = 0 (la animación float se aplica vía t.y en el update loop)
+    drawBalloon(ctx, cw / 2, r + pad, r, color, 1, 0)
+  }
+  return offscreen
+}
+
 function spawnTargets(level: LevelConfig, canvasW: number, canvasH: number): Target[] {
   const targets: Target[] = []
   const shelfY  = canvasH * SHELF_Y_RATIO   // Y del suelo del estante
@@ -140,6 +171,7 @@ function spawnTargets(level: LevelConfig, canvasW: number, canvasH: number): Tar
       ? shelfY - h * 2 - randBetween(0, 60)   // flotan arriba del estante
       : shelfY - h / 2                          // base de la botella/lata toca el estante
 
+    const color = getTargetColor(type)
     targets.push({
       id: nextId++,
       x, y: baseY, baseY,
@@ -152,8 +184,9 @@ function spawnTargets(level: LevelConfig, canvasW: number, canvasH: number): Tar
       hit: false, hitTime: 0,
       falling: false, vy: 0,
       rotation: 0, rotVel: 0,
-      color: getTargetColor(type),
+      color,
       points: getTargetPoints(type),
+      cachedCanvas: prerenderTarget(type, w, h, color),
     })
   }
   // Paso 1: empujar targets que están muy juntos (forward pass)
@@ -810,6 +843,7 @@ export default function Game() {
   const lastMPTsRef       = useRef(0)         // timestamp del último inference de MediaPipe (ms)
   const prevCanvasSizeRef = useRef({ w: 0, h: 0 }) // para detectar rotación de pantalla
   const photoWaveRef      = useRef(1)         // ola actual en modo foto
+  const levelHadTargetsRef = useRef(false)   // guard: evita que el level-complete nunca dispare si todos los targets caen del array simultáneamente
 
   // React UI state (only for phase changes)
   const [phase, setPhase] = useState<GamePhase>('loading')
@@ -833,7 +867,8 @@ export default function Game() {
         const { HandLandmarker } = await import('@mediapipe/tasks-vision')
         const MODEL_URL =
           'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
-        const baseOpts = { numHands: 2, runningMode: 'VIDEO' as const, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 }
+        // Confidencias más bajas → detecta manos más fácilmente (antes 0.5 cada una)
+        const baseOpts = { numHands: 2, runningMode: 'VIDEO' as const, minHandDetectionConfidence: 0.4, minHandPresenceConfidence: 0.4, minTrackingConfidence: 0.4 }
 
         // Try GPU first (faster), fallback to CPU for mobile Safari / older devices
         try {
@@ -929,6 +964,7 @@ export default function Game() {
     timeLeftRef.current   = cfg.timeLimit
     lastSecondRef.current = Date.now()
     targetsRef.current    = spawnTargets(cfg, W, H)
+    levelHadTargetsRef.current = true   // hay targets — el level-complete ya puede disparar
     particlesRef.current  = []
     floatingTextsRef.current = []
     comboRef.current      = 0
@@ -1040,6 +1076,7 @@ export default function Game() {
 
     photoWaveRef.current     = 1
     targetsRef.current       = spawnPhotoLevel(photoImagesRef.current.length, W, H, 1)
+    levelHadTargetsRef.current = true
     particlesRef.current     = []
     floatingTextsRef.current = []
     prevCanvasSizeRef.current = { w: W, h: H }  // ancla referencia de tamaño
@@ -1135,6 +1172,8 @@ export default function Game() {
     let lastTs = performance.now()
     // PERF: cachear ctx fuera del loop para no llamar getContext cada frame
     let cachedCtx: CanvasRenderingContext2D | null = null
+    // Reset MediaPipe timestamp para que dispare inmediatamente en el primer frame del nuevo loop
+    lastMPTsRef.current = 0
 
     const loop = (ts: number) => {
       // Siempre re-programamos el siguiente frame, incluso si hay excepción
@@ -1181,8 +1220,8 @@ export default function Game() {
       const W = canvas.width, H = canvas.height
 
       frameCountRef.current++
-      // ── Hand detection — máximo ~12fps (80ms entre inferences) — más fluido que 120ms ──
-      if (video.readyState >= 2 && ts - lastMPTsRef.current >= 80) {
+      // ── Hand detection — máximo ~16fps (60ms entre inferences) — más reactivo que 80ms ──
+      if (video.readyState >= 2 && ts - lastMPTsRef.current >= 60) {
         lastMPTsRef.current = ts
         try {
           const results = hl.detectForVideo(video, ts)
@@ -1272,8 +1311,13 @@ export default function Game() {
       }
 
       // ── Check level complete ──
+      // Usamos levelHadTargetsRef para evitar el bug donde todos los targets caen
+      // del array (t.y > H + h*2) en el mismo frame → targetsRef.current.length === 0
+      // → la condición original nunca dispara → freeze esperando el timer.
       const alive = targetsRef.current.filter(t => !t.falling && !t.hit)
-      if (alive.length === 0 && targetsRef.current.length > 0) {
+      const levelShouldComplete = alive.length === 0 && (targetsRef.current.length > 0 || levelHadTargetsRef.current)
+      if (levelShouldComplete) {
+        levelHadTargetsRef.current = false   // reset para evitar double-trigger
         playLevelUp()
         if (isPhotoModeRef.current) {
           const nextWave = photoWaveRef.current + 1
@@ -1287,6 +1331,7 @@ export default function Game() {
             // Nueva ola — spawn inmediato, loop continúa sin interrupción
             photoWaveRef.current = nextWave
             targetsRef.current = spawnPhotoLevel(photoImagesRef.current.length, W, H, nextWave)
+            levelHadTargetsRef.current = true   // nueva ola tiene targets
             particlesRef.current = []
             const waveColor = nextWave >= MAX_PHOTO_WAVES ? '#ff4444' : '#ff00ff'
             floatingTextsRef.current.push({
@@ -1345,25 +1390,37 @@ export default function Game() {
       // Background
       drawBackground(ctx, W, H, timeRef.current)
 
-      // Targets
+      // Targets — PERF: ctx.drawImage desde cachedCanvas elimina createGradient en hot path
+      const pad = 4
       targetsRef.current.forEach(t => {
         ctx.save()
         ctx.translate(t.x, t.y)
         ctx.rotate(t.rotation)
         const alpha = t.falling ? Math.max(0, 1 - (Date.now() - t.hitTime) / 400) : 1
-        if (t.type === 'bottle') {
-          drawBottle(ctx, 0, 0, t.w, t.h, t.color, alpha)
-        } else if (t.type === 'can') {
-          drawCan(ctx, 0, 0, t.w, t.h, t.color, alpha)
-        } else if (t.type === 'photo') {
+
+        if (t.type === 'photo') {
           const img = t.photoIndex !== undefined ? photoImagesRef.current[t.photoIndex] : null
-          if (img) {
-            drawPhotoTarget(ctx, img, t.w / 2, alpha, timeRef.current, 0)
+          if (img) drawPhotoTarget(ctx, img, t.w / 2, alpha, timeRef.current, 0)
+        } else if (t.cachedCanvas) {
+          // Ruta rápida: drawImage desde canvas pre-renderizado (sin gradients en caliente)
+          ctx.globalAlpha = alpha
+          if (t.type === 'balloon') {
+            // Centro del globo está en (r+pad, r+pad) dentro del canvas pre-renderizado
+            ctx.drawImage(t.cachedCanvas, -(t.w / 2 + pad), -(t.w / 2 + pad))
+          } else {
+            // Botellas y latas: centro en (w/2+pad, h/2+pad)
+            ctx.drawImage(t.cachedCanvas, -(t.w / 2 + pad), -(t.h / 2 + pad))
           }
         } else {
-          ctx.translate(-t.x, -t.y) // drawBalloon handles its own translate
-          drawBalloon(ctx, t.x, t.y, t.w / 2, t.color, alpha, timeRef.current)
-          ctx.translate(t.x, t.y)
+          // Fallback (solo SSR o si prerenderTarget falló) — crea gradients en caliente
+          if (t.type === 'bottle') {
+            drawBottle(ctx, 0, 0, t.w, t.h, t.color, alpha)
+          } else if (t.type === 'can') {
+            drawCan(ctx, 0, 0, t.w, t.h, t.color, alpha)
+          } else {
+            ctx.translate(-t.x, -t.y)
+            drawBalloon(ctx, t.x, t.y, t.w / 2, t.color, alpha, timeRef.current)
+          }
         }
         ctx.restore()
       })

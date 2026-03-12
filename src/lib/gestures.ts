@@ -28,10 +28,10 @@ export function makeInitialGestureState(): GestureTrackerState {
 
 const FIST_THRESHOLD   = 0.38   // por debajo = puño
 const OPEN_THRESHOLD   = 0.60   // por encima = mano abierta
-const FIST_MIN_FRAMES  = 3      // ~90ms a 15fps para confirmar puño
+const FIST_MIN_FRAMES  = 2      // 2 frames a 60ms ≈ 120ms para confirmar puño (antes 240ms)
 const OPEN_MIN_FRAMES  = 2      // rápido al abrir (respuesta inmediata)
-const SHOT_COOLDOWN_MS = 450    // mínimo entre disparos
-const SMOOTH_ALPHA     = 0.55   // EMA: 0=todo suavizado, 1=sin suavizado
+const SHOT_COOLDOWN_MS = 300    // mínimo entre disparos (antes 450ms — era demasiado lento)
+const SMOOTH_ALPHA     = 0.65   // EMA: más alto = más reactivo, menos suavizado (antes 0.55)
 
 // ─── Helpers matemáticos ──────────────────────────────────────────────────────
 
