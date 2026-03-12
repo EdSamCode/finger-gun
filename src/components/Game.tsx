@@ -844,6 +844,7 @@ export default function Game() {
   const prevCanvasSizeRef = useRef({ w: 0, h: 0 }) // para detectar rotación de pantalla
   const photoWaveRef      = useRef(1)         // ola actual en modo foto
   const levelHadTargetsRef = useRef(false)   // guard: evita que el level-complete nunca dispare si todos los targets caen del array simultáneamente
+  const lastMPDurationRef  = useRef(0)       // ms que tardó el último detectForVideo — para throttle adaptativo
 
   // React UI state (only for phase changes)
   const [phase, setPhase] = useState<GamePhase>('loading')
@@ -1220,9 +1221,14 @@ export default function Game() {
       const W = canvas.width, H = canvas.height
 
       frameCountRef.current++
-      // ── Hand detection — máximo ~16fps (60ms entre inferences) — más reactivo que 80ms ──
-      if (video.readyState >= 2 && ts - lastMPTsRef.current >= 60) {
+      // ── Hand detection — throttle ADAPTATIVO ──────────────────────────────────
+      // Si el último detectForVideo tardó Xms, esperamos al menos X*1.5ms antes de
+      // llamarlo de nuevo. Esto evita que bloquee el main thread continuamente en
+      // dispositivos lentos (CPU delegate). Mínimo 60ms, máximo 200ms.
+      const mpThrottle = Math.min(200, Math.max(60, lastMPDurationRef.current * 1.5))
+      if (video.readyState >= 2 && ts - lastMPTsRef.current >= mpThrottle) {
         lastMPTsRef.current = ts
+        const _mpT0 = performance.now()
         try {
           const results = hl.detectForVideo(video, ts)
           const detectedCount = results.landmarks?.length ?? 0
@@ -1247,6 +1253,8 @@ export default function Game() {
             }
           }
         } catch { /* ignorar errores de frame */ }
+        // Medir duración para el throttle adaptativo del próximo ciclo
+        lastMPDurationRef.current = performance.now() - _mpT0
       }
 
       // ── Shoot (ambas manos) — limpiamos justShot inmediatamente para evitar disparo múltiple ──
@@ -1318,17 +1326,20 @@ export default function Game() {
       const levelShouldComplete = alive.length === 0 && (targetsRef.current.length > 0 || levelHadTargetsRef.current)
       if (levelShouldComplete) {
         levelHadTargetsRef.current = false   // reset para evitar double-trigger
-        playLevelUp()
+
         if (isPhotoModeRef.current) {
           const nextWave = photoWaveRef.current + 1
           if (nextWave > MAX_PHOTO_WAVES) {
-            // ¡Todas las olas completadas! = máximo logro
+            // ¡Todas las olas completadas!
+            // cancelRAF ANTES de cualquier llamada que pueda fallar
             cancelAnimationFrame(rafRef.current)
+            try { playLevelUp() } catch { /* audio no es crítico */ }
             setFinalScore(scoreRef.current)
             setPhase('photoLevelEnd')
             return
           } else {
             // Nueva ola — spawn inmediato, loop continúa sin interrupción
+            try { playLevelUp() } catch { /* audio no es crítico */ }
             photoWaveRef.current = nextWave
             targetsRef.current = spawnPhotoLevel(photoImagesRef.current.length, W, H, nextWave)
             levelHadTargetsRef.current = true   // nueva ola tiene targets
@@ -1342,7 +1353,10 @@ export default function Game() {
             // No return — el loop RAF continúa con los nuevos targets
           }
         } else {
+          // CRÍTICO: cancelRAF ANTES de playLevelUp — si playLevelUp lanza error,
+          // el RAF ya está cancelado y no se queda corriendo con 0 targets
           cancelAnimationFrame(rafRef.current)
+          try { playLevelUp() } catch { /* audio no es crítico */ }
           const nextLvl = levelRef.current + 1
           if (nextLvl > LEVELS.length) {
             setFinalScore(scoreRef.current)
