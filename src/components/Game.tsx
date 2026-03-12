@@ -396,6 +396,7 @@ function drawCrosshair(
   justShot: boolean,
 ) {
   ctx.save()
+  ctx.shadowBlur = 0  // PERF: shadowBlur es el #1 killer de FPS en canvas 2D
 
   // Parámetros que cambian según estado
   const pulse   = 1 + Math.sin(t * 9) * 0.035
@@ -406,19 +407,22 @@ function drawCrosshair(
       ? '#ff4400'                   // puño = rojo intenso (listo)
       : `hsl(${openness * 60 + 10}, 100%, 55%)` // transición naranja→amarillo→verde
 
-  ctx.shadowColor = color
-  ctx.shadowBlur  = IS_MOBILE ? (justShot ? 12 : 5) : (justShot ? 20 : 8)
+  // Anillo exterior — sin shadowBlur, usamos doble stroke para simular glow
+  ctx.globalAlpha = justShot ? 0.35 : 0.3
+  ctx.strokeStyle = color
+  ctx.lineWidth   = justShot ? 7 : 5
+  ctx.beginPath()
+  ctx.arc(x, y, baseR, 0, Math.PI * 2)
+  ctx.stroke()
 
-  // Anillo exterior
   ctx.strokeStyle = color
   ctx.lineWidth   = justShot ? 3 : 2
-  ctx.globalAlpha = justShot ? 1 : 0.85
+  ctx.globalAlpha = justShot ? 1 : 0.9
   ctx.beginPath()
   ctx.arc(x, y, baseR, 0, Math.PI * 2)
   ctx.stroke()
 
   // Arco de "carga" — muestra qué tan abierta está la mano
-  // Cuando el puño se ABRE, el arco se llena hasta 360°
   if (!justShot && openness > 0.1) {
     const arcEnd = (openness - 0.1) / 0.5 * Math.PI * 2  // 0 → 2π
     ctx.strokeStyle = '#ffffff'
@@ -441,7 +445,7 @@ function drawCrosshair(
   const lineLen = 12
   ctx.lineWidth   = 2
   ctx.strokeStyle = color
-  ctx.globalAlpha = 0.7
+  ctx.globalAlpha = 0.75
   ctx.beginPath()
   ctx.moveTo(x - gap - lineLen, y); ctx.lineTo(x - gap, y)
   ctx.moveTo(x + gap, y);           ctx.lineTo(x + gap + lineLen, y)
@@ -451,7 +455,7 @@ function drawCrosshair(
 
   // Flash de disparo
   if (justShot) {
-    ctx.globalAlpha = 0.35
+    ctx.globalAlpha = 0.25
     ctx.fillStyle   = '#00ff88'
     ctx.beginPath()
     ctx.arc(x, y, baseR * 1.8, 0, Math.PI * 2)
@@ -462,34 +466,52 @@ function drawCrosshair(
 }
 
 function drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[]) {
-  particles.forEach(p => {
-    const alpha = p.life / p.maxLife
+  if (particles.length === 0) return
+  // PERF: batching por shape — 1 save/restore total en lugar de N save/restore
+  ctx.save()
+  ctx.shadowBlur = 0
+
+  // ── Smoke (circles) ──
+  for (const p of particles) {
+    if (p.shape !== 'smoke') continue
+    ctx.globalAlpha = (p.life / p.maxLife) * 0.7
+    ctx.fillStyle = p.color
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // ── Sparks (rects) — sin rotación: fillRect directo ──
+  for (const p of particles) {
+    if (p.shape !== 'spark') continue
+    ctx.globalAlpha = p.life / p.maxLife
+    ctx.fillStyle = p.color
     ctx.save()
-    ctx.globalAlpha = alpha
     ctx.translate(p.x, p.y)
     ctx.rotate(p.rotation)
-
-    if (p.shape === 'smoke') {
-      ctx.fillStyle = p.color
-      ctx.beginPath()
-      ctx.arc(0, 0, p.size, 0, Math.PI * 2)
-      ctx.fill()
-    } else if (p.shape === 'spark') {
-      ctx.fillStyle = p.color
-      ctx.fillRect(-1, -p.size / 2, 2, p.size)
-    } else {
-      // shard — thin quadrilateral
-      ctx.fillStyle = p.color
-      ctx.beginPath()
-      ctx.moveTo(0, -p.size)
-      ctx.lineTo(p.size / 3, 0)
-      ctx.lineTo(0, p.size / 2)
-      ctx.lineTo(-p.size / 3, 0)
-      ctx.closePath()
-      ctx.fill()
-    }
+    ctx.fillRect(-1, -p.size / 2, 2, p.size)
     ctx.restore()
-  })
+  }
+
+  // ── Shards (diamonds con rotación) ──
+  for (const p of particles) {
+    if (p.shape !== 'shard') continue
+    ctx.globalAlpha = p.life / p.maxLife
+    ctx.fillStyle = p.color
+    ctx.save()
+    ctx.translate(p.x, p.y)
+    ctx.rotate(p.rotation)
+    ctx.beginPath()
+    ctx.moveTo(0, -p.size)
+    ctx.lineTo(p.size / 3, 0)
+    ctx.lineTo(0, p.size / 2)
+    ctx.lineTo(-p.size / 3, 0)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+  }
+
+  ctx.restore()
 }
 
 /**
@@ -507,25 +529,29 @@ function drawPhotoTarget(
   ctx.save()
   ctx.globalAlpha = alpha
   ctx.rotate(rotation)
-
-  // ── Sombra exterior ──
-  ctx.shadowColor = '#ff6600'
-  ctx.shadowBlur  = IS_MOBILE ? 6 : 20 + Math.sin(t * 3) * 6
+  ctx.shadowBlur = 0  // PERF: sin shadow
 
   // ── Imagen recortada a círculo ──
   ctx.save()
   ctx.beginPath()
   ctx.arc(0, 0, r, 0, Math.PI * 2)
   ctx.clip()
-  // Escalar imagen para que llene el círculo sin deformarse (object-fit: cover)
   const side = r * 2
   ctx.drawImage(img, -r, -r, side, side)
   ctx.restore()
 
-  // ── Anillo pulsante naranja ──
+  // ── Anillo pulsante naranja — doble stroke para efecto glow sin shadowBlur ──
   const pulse = 1 + Math.sin(t * 4) * 0.08
+  ctx.globalAlpha = alpha * 0.35
   ctx.strokeStyle = '#ff6600'
-  ctx.lineWidth   = 4 * pulse
+  ctx.lineWidth   = 8 * pulse
+  ctx.beginPath()
+  ctx.arc(0, 0, r + 3, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.globalAlpha = alpha
+  ctx.strokeStyle = '#ff6600'
+  ctx.lineWidth   = 3 * pulse
   ctx.beginPath()
   ctx.arc(0, 0, r + 3, 0, Math.PI * 2)
   ctx.stroke()
@@ -540,7 +566,6 @@ function drawPhotoTarget(
   // ── Cruz de mira encima ──
   ctx.strokeStyle = 'rgba(255,100,0,0.55)'
   ctx.lineWidth   = 1.5
-  ctx.shadowBlur  = 0
   const arm = r + 10
   ctx.beginPath()
   ctx.moveTo(-arm, 0); ctx.lineTo(-r + 6, 0)
@@ -554,7 +579,7 @@ function drawPhotoTarget(
   ctx.font        = 'bold 11px "Courier New", monospace'
   ctx.textAlign   = 'center'
   ctx.globalAlpha = alpha * 0.8
-  ctx.fillText('★ 500 pts', 0, r + 16)
+  ctx.fillText('\u2605 500 pts', 0, r + 16)
 
   ctx.restore()
 }
@@ -681,14 +706,12 @@ function drawHUD(
   photoWave: number = 0,   // >0 = estamos en modo foto, indica la ola actual
 ) {
   ctx.save()
-  ctx.shadowBlur = 0
+  ctx.shadowBlur = 0  // PERF: sin shadow en HUD
 
   // Score — top left
   ctx.fillStyle = '#ffffff'
   ctx.font = 'bold 32px "Courier New", monospace'
   ctx.textAlign = 'left'
-  ctx.shadowColor = '#ff6600'
-  ctx.shadowBlur = IS_MOBILE ? 3 : 8
   ctx.fillText(`${score.toString().padStart(7, '0')}`, 20, 44)
 
   // Level / Ola — top right
@@ -696,9 +719,7 @@ function drawHUD(
   ctx.font = 'bold 18px "Courier New", monospace'
   if (photoWave > 0) {
     ctx.fillStyle = photoWave >= MAX_PHOTO_WAVES ? '#ff4444' : '#cc88ff'
-    ctx.shadowColor = photoWave >= MAX_PHOTO_WAVES ? '#ff0000' : '#9900ff'
-    ctx.shadowBlur = IS_MOBILE ? 4 : 12
-    ctx.fillText(`OLA ${photoWave}/${MAX_PHOTO_WAVES} 📸`, w - 20, 30)
+    ctx.fillText(`OLA ${photoWave}/${MAX_PHOTO_WAVES} \u{1F4F8}`, w - 20, 30)
   } else {
     ctx.fillStyle = '#ffcc00'
     ctx.fillText(`NIVEL ${level}`, w - 20, 30)
@@ -707,7 +728,6 @@ function drawHUD(
   // Time bar
   const barW = 200
   const barX = w / 2 - barW / 2
-  ctx.shadowBlur = 0
   ctx.fillStyle = 'rgba(0,0,0,0.5)'
   ctx.fillRect(barX, 16, barW, 10)
   const limitSecs = photoWave > 0 ? 45 : (LEVELS[level - 1]?.timeLimit ?? 30)
@@ -722,8 +742,7 @@ function drawHUD(
   // Lives
   ctx.textAlign = 'right'
   ctx.font = '20px Arial'
-  ctx.shadowColor = '#ff4444'
-  ctx.shadowBlur = IS_MOBILE ? 2 : 6
+  ctx.fillStyle = '#ff4444'
   for (let i = 0; i < lives; i++) {
     ctx.fillText('♥', w - 20 - i * 26, 56)
   }
@@ -732,8 +751,6 @@ function drawHUD(
   if (combo >= 2) {
     ctx.textAlign = 'center'
     ctx.font = `bold ${28 + combo * 4}px "Courier New", monospace`
-    ctx.shadowColor = '#ff00ff'
-    ctx.shadowBlur = IS_MOBILE ? 6 : 20
     ctx.fillStyle = `hsl(${280 + combo * 20}, 100%, 70%)`
     ctx.fillText(`x${combo} COMBO!`, w / 2, 90)
   }
@@ -745,18 +762,18 @@ function drawHUD(
 }
 
 function drawFloatingTexts(ctx: CanvasRenderingContext2D, texts: FloatingText[]) {
-  texts.forEach(ft => {
+  if (texts.length === 0) return
+  ctx.save()
+  ctx.shadowBlur = 0  // PERF: sin shadow
+  ctx.textAlign = 'center'
+  for (const ft of texts) {
     const alpha = ft.life / ft.maxLife
-    ctx.save()
     ctx.globalAlpha = alpha
-    ctx.textAlign = 'center'
     ctx.font = `bold ${ft.size}px "Courier New", monospace`
-    ctx.shadowColor = ft.color
-    ctx.shadowBlur = IS_MOBILE ? 4 : 12
     ctx.fillStyle = ft.color
     ctx.fillText(ft.text, ft.x, ft.y)
-    ctx.restore()
-  })
+  }
+  ctx.restore()
 }
 
 // ─── Main Game Component ──────────────────────────────────────────────────────
@@ -816,7 +833,7 @@ export default function Game() {
         const { HandLandmarker } = await import('@mediapipe/tasks-vision')
         const MODEL_URL =
           'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
-        const baseOpts = { numHands: 1, runningMode: 'VIDEO' as const, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 }
+        const baseOpts = { numHands: 2, runningMode: 'VIDEO' as const, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 }
 
         // Try GPU first (faster), fallback to CPU for mobile Safari / older devices
         try {
@@ -1116,6 +1133,8 @@ export default function Game() {
     if (phase !== 'playing' && phase !== 'photoLevel') return
 
     let lastTs = performance.now()
+    // PERF: cachear ctx fuera del loop para no llamar getContext cada frame
+    let cachedCtx: CanvasRenderingContext2D | null = null
 
     const loop = (ts: number) => {
       // Siempre re-programamos el siguiente frame, incluso si hay excepción
@@ -1131,11 +1150,13 @@ export default function Game() {
       const video  = videoRef.current
       const hl     = handLandmarkerRef.current
       if (!canvas || !video || !hl) return
+      if (!cachedCtx) cachedCtx = canvas.getContext('2d')
 
       // Resize canvas to actual display size (handles device rotation)
       const newCW = canvas.offsetWidth
       const newCH = canvas.offsetHeight
       if (canvas.width !== newCW || canvas.height !== newCH) {
+        cachedCtx = null  // invalidar cache al redimensionar
         const prevW = prevCanvasSizeRef.current.w
         const prevH = prevCanvasSizeRef.current.h
         // Reposicionar targets proporcionalmente para que sigan sobre el estante
@@ -1152,15 +1173,16 @@ export default function Game() {
         }
         canvas.width  = newCW
         canvas.height = newCH
+        cachedCtx = canvas.getContext('2d')  // re-cachear tras resize
         prevCanvasSizeRef.current = { w: newCW, h: newCH }
       }
 
-      const ctx = canvas.getContext('2d')!
+      const ctx = cachedCtx!
       const W = canvas.width, H = canvas.height
 
       frameCountRef.current++
-      // ── Hand detection — máximo ~8fps (120ms entre inferences) para no bloquear el hilo principal ──
-      if (video.readyState >= 2 && ts - lastMPTsRef.current >= 120) {
+      // ── Hand detection — máximo ~12fps (80ms entre inferences) — más fluido que 120ms ──
+      if (video.readyState >= 2 && ts - lastMPTsRef.current >= 80) {
         lastMPTsRef.current = ts
         try {
           const results = hl.detectForVideo(video, ts)
@@ -1226,7 +1248,7 @@ export default function Game() {
         return true
       })
 
-      // ── Timer ──
+      // ── Timer — Date.now() cacheado una vez por frame ──
       const now = Date.now()
       if (now - lastSecondRef.current >= 1000) {
         lastSecondRef.current = now
@@ -1724,7 +1746,7 @@ export default function Game() {
               onChange={handlePhotoUpload}
             />
             <div className="relative">
-              <div className="absolute inset-0 rounded-full bg-orange-500 opacity-25 animate-ping" />
+              {/* PERF: sin animate-ping — causaba repaint CSS continuo compitiendo con canvas */}
               <div className="relative bg-orange-500 hover:bg-orange-400 active:scale-90 transition-all text-white rounded-full w-14 h-14 flex items-center justify-center text-2xl shadow-xl shadow-orange-500/40">
                 📸
               </div>
