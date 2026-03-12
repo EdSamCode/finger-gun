@@ -37,8 +37,6 @@ interface Target {
   // visual
   color: string
   points: number
-  // PERF: canvas pre-renderizado para evitar createGradient en el RAF hot path
-  cachedCanvas?: HTMLCanvasElement
 }
 
 interface Particle {
@@ -119,35 +117,6 @@ const IS_MOBILE = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/
 
 let nextId = 1
 
-// ─── Pre-render target a offscreen canvas ─────────────────────────────────────
-// Elimina createLinearGradient/createRadialGradient del RAF hot path (60fps).
-// La GC de estos objetos en cada frame es la principal causa de jank y freezes.
-function prerenderTarget(type: TargetType, w: number, h: number, color: string): HTMLCanvasElement | undefined {
-  if (typeof document === 'undefined') return undefined
-  const pad = 4
-  const r   = w / 2
-
-  // El canvas de globo debe incluir la cuerda que cuelga debajo del centro
-  const cw = w + pad * 2
-  const ch = type === 'balloon' ? Math.ceil(r * 2.2 + 30) + pad * 2 : h + pad * 2
-
-  const offscreen = document.createElement('canvas')
-  offscreen.width  = cw
-  offscreen.height = ch
-  const ctx = offscreen.getContext('2d')
-  if (!ctx) return undefined
-
-  if (type === 'bottle') {
-    drawBottle(ctx, cw / 2, ch / 2, w, h, color, 1)
-  } else if (type === 'can') {
-    drawCan(ctx, cw / 2, ch / 2, w, h, color, 1)
-  } else if (type === 'balloon') {
-    // t=0 → bob interno = 0 (la animación float se aplica vía t.y en el update loop)
-    drawBalloon(ctx, cw / 2, r + pad, r, color, 1, 0)
-  }
-  return offscreen
-}
-
 function spawnTargets(level: LevelConfig, canvasW: number, canvasH: number): Target[] {
   const targets: Target[] = []
   const shelfY  = canvasH * SHELF_Y_RATIO   // Y del suelo del estante
@@ -171,7 +140,6 @@ function spawnTargets(level: LevelConfig, canvasW: number, canvasH: number): Tar
       ? shelfY - h * 2 - randBetween(0, 60)   // flotan arriba del estante
       : shelfY - h / 2                          // base de la botella/lata toca el estante
 
-    const color = getTargetColor(type)
     targets.push({
       id: nextId++,
       x, y: baseY, baseY,
@@ -184,9 +152,8 @@ function spawnTargets(level: LevelConfig, canvasW: number, canvasH: number): Tar
       hit: false, hitTime: 0,
       falling: false, vy: 0,
       rotation: 0, rotVel: 0,
-      color,
+      color: getTargetColor(type),
       points: getTargetPoints(type),
-      cachedCanvas: prerenderTarget(type, w, h, color),
     })
   }
   // Paso 1: empujar targets que están muy juntos (forward pass)
@@ -266,7 +233,7 @@ function spawnPhotoLevel(photoCount: number, canvasW: number, canvasH: number, w
 
 function spawnParticles(x: number, y: number, type: TargetType): Particle[] {
   const particles: Particle[] = []
-  const count = type === 'balloon' ? 8 : 12
+  const count = type === 'balloon' ? 12 : 20
   const color = getTargetColor(type)
 
   for (let i = 0; i < count; i++) {
@@ -287,7 +254,7 @@ function spawnParticles(x: number, y: number, type: TargetType): Particle[] {
     })
   }
   // Smoke puffs
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     particles.push({
       x: x + randBetween(-15, 15),
       y: y + randBetween(-10, 10),
@@ -429,7 +396,6 @@ function drawCrosshair(
   justShot: boolean,
 ) {
   ctx.save()
-  ctx.shadowBlur = 0  // PERF: shadowBlur es el #1 killer de FPS en canvas 2D
 
   // Parámetros que cambian según estado
   const pulse   = 1 + Math.sin(t * 9) * 0.035
@@ -440,22 +406,19 @@ function drawCrosshair(
       ? '#ff4400'                   // puño = rojo intenso (listo)
       : `hsl(${openness * 60 + 10}, 100%, 55%)` // transición naranja→amarillo→verde
 
-  // Anillo exterior — sin shadowBlur, usamos doble stroke para simular glow
-  ctx.globalAlpha = justShot ? 0.35 : 0.3
-  ctx.strokeStyle = color
-  ctx.lineWidth   = justShot ? 7 : 5
-  ctx.beginPath()
-  ctx.arc(x, y, baseR, 0, Math.PI * 2)
-  ctx.stroke()
+  ctx.shadowColor = color
+  ctx.shadowBlur  = IS_MOBILE ? (justShot ? 12 : 5) : (justShot ? 40 : 18)
 
+  // Anillo exterior
   ctx.strokeStyle = color
   ctx.lineWidth   = justShot ? 3 : 2
-  ctx.globalAlpha = justShot ? 1 : 0.9
+  ctx.globalAlpha = justShot ? 1 : 0.85
   ctx.beginPath()
   ctx.arc(x, y, baseR, 0, Math.PI * 2)
   ctx.stroke()
 
   // Arco de "carga" — muestra qué tan abierta está la mano
+  // Cuando el puño se ABRE, el arco se llena hasta 360°
   if (!justShot && openness > 0.1) {
     const arcEnd = (openness - 0.1) / 0.5 * Math.PI * 2  // 0 → 2π
     ctx.strokeStyle = '#ffffff'
@@ -478,7 +441,7 @@ function drawCrosshair(
   const lineLen = 12
   ctx.lineWidth   = 2
   ctx.strokeStyle = color
-  ctx.globalAlpha = 0.75
+  ctx.globalAlpha = 0.7
   ctx.beginPath()
   ctx.moveTo(x - gap - lineLen, y); ctx.lineTo(x - gap, y)
   ctx.moveTo(x + gap, y);           ctx.lineTo(x + gap + lineLen, y)
@@ -488,7 +451,7 @@ function drawCrosshair(
 
   // Flash de disparo
   if (justShot) {
-    ctx.globalAlpha = 0.25
+    ctx.globalAlpha = 0.35
     ctx.fillStyle   = '#00ff88'
     ctx.beginPath()
     ctx.arc(x, y, baseR * 1.8, 0, Math.PI * 2)
@@ -499,52 +462,34 @@ function drawCrosshair(
 }
 
 function drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[]) {
-  if (particles.length === 0) return
-  // PERF: batching por shape — 1 save/restore total en lugar de N save/restore
-  ctx.save()
-  ctx.shadowBlur = 0
-
-  // ── Smoke (circles) ──
-  for (const p of particles) {
-    if (p.shape !== 'smoke') continue
-    ctx.globalAlpha = (p.life / p.maxLife) * 0.7
-    ctx.fillStyle = p.color
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  // ── Sparks (rects) — sin rotación: fillRect directo ──
-  for (const p of particles) {
-    if (p.shape !== 'spark') continue
-    ctx.globalAlpha = p.life / p.maxLife
-    ctx.fillStyle = p.color
+  particles.forEach(p => {
+    const alpha = p.life / p.maxLife
     ctx.save()
+    ctx.globalAlpha = alpha
     ctx.translate(p.x, p.y)
     ctx.rotate(p.rotation)
-    ctx.fillRect(-1, -p.size / 2, 2, p.size)
-    ctx.restore()
-  }
 
-  // ── Shards (diamonds con rotación) ──
-  for (const p of particles) {
-    if (p.shape !== 'shard') continue
-    ctx.globalAlpha = p.life / p.maxLife
-    ctx.fillStyle = p.color
-    ctx.save()
-    ctx.translate(p.x, p.y)
-    ctx.rotate(p.rotation)
-    ctx.beginPath()
-    ctx.moveTo(0, -p.size)
-    ctx.lineTo(p.size / 3, 0)
-    ctx.lineTo(0, p.size / 2)
-    ctx.lineTo(-p.size / 3, 0)
-    ctx.closePath()
-    ctx.fill()
+    if (p.shape === 'smoke') {
+      ctx.fillStyle = p.color
+      ctx.beginPath()
+      ctx.arc(0, 0, p.size, 0, Math.PI * 2)
+      ctx.fill()
+    } else if (p.shape === 'spark') {
+      ctx.fillStyle = p.color
+      ctx.fillRect(-1, -p.size / 2, 2, p.size)
+    } else {
+      // shard — thin quadrilateral
+      ctx.fillStyle = p.color
+      ctx.beginPath()
+      ctx.moveTo(0, -p.size)
+      ctx.lineTo(p.size / 3, 0)
+      ctx.lineTo(0, p.size / 2)
+      ctx.lineTo(-p.size / 3, 0)
+      ctx.closePath()
+      ctx.fill()
+    }
     ctx.restore()
-  }
-
-  ctx.restore()
+  })
 }
 
 /**
@@ -562,29 +507,25 @@ function drawPhotoTarget(
   ctx.save()
   ctx.globalAlpha = alpha
   ctx.rotate(rotation)
-  ctx.shadowBlur = 0  // PERF: sin shadow
+
+  // ── Sombra exterior ──
+  ctx.shadowColor = '#ff6600'
+  ctx.shadowBlur  = IS_MOBILE ? 6 : 20 + Math.sin(t * 3) * 6
 
   // ── Imagen recortada a círculo ──
   ctx.save()
   ctx.beginPath()
   ctx.arc(0, 0, r, 0, Math.PI * 2)
   ctx.clip()
+  // Escalar imagen para que llene el círculo sin deformarse (object-fit: cover)
   const side = r * 2
   ctx.drawImage(img, -r, -r, side, side)
   ctx.restore()
 
-  // ── Anillo pulsante naranja — doble stroke para efecto glow sin shadowBlur ──
+  // ── Anillo pulsante naranja ──
   const pulse = 1 + Math.sin(t * 4) * 0.08
-  ctx.globalAlpha = alpha * 0.35
   ctx.strokeStyle = '#ff6600'
-  ctx.lineWidth   = 8 * pulse
-  ctx.beginPath()
-  ctx.arc(0, 0, r + 3, 0, Math.PI * 2)
-  ctx.stroke()
-
-  ctx.globalAlpha = alpha
-  ctx.strokeStyle = '#ff6600'
-  ctx.lineWidth   = 3 * pulse
+  ctx.lineWidth   = 4 * pulse
   ctx.beginPath()
   ctx.arc(0, 0, r + 3, 0, Math.PI * 2)
   ctx.stroke()
@@ -599,6 +540,7 @@ function drawPhotoTarget(
   // ── Cruz de mira encima ──
   ctx.strokeStyle = 'rgba(255,100,0,0.55)'
   ctx.lineWidth   = 1.5
+  ctx.shadowBlur  = 0
   const arm = r + 10
   ctx.beginPath()
   ctx.moveTo(-arm, 0); ctx.lineTo(-r + 6, 0)
@@ -612,7 +554,7 @@ function drawPhotoTarget(
   ctx.font        = 'bold 11px "Courier New", monospace'
   ctx.textAlign   = 'center'
   ctx.globalAlpha = alpha * 0.8
-  ctx.fillText('\u2605 500 pts', 0, r + 16)
+  ctx.fillText('★ 500 pts', 0, r + 16)
 
   ctx.restore()
 }
@@ -739,12 +681,14 @@ function drawHUD(
   photoWave: number = 0,   // >0 = estamos en modo foto, indica la ola actual
 ) {
   ctx.save()
-  ctx.shadowBlur = 0  // PERF: sin shadow en HUD
+  ctx.shadowBlur = 0
 
   // Score — top left
   ctx.fillStyle = '#ffffff'
   ctx.font = 'bold 32px "Courier New", monospace'
   ctx.textAlign = 'left'
+  ctx.shadowColor = '#ff6600'
+  ctx.shadowBlur = IS_MOBILE ? 3 : 8
   ctx.fillText(`${score.toString().padStart(7, '0')}`, 20, 44)
 
   // Level / Ola — top right
@@ -752,7 +696,9 @@ function drawHUD(
   ctx.font = 'bold 18px "Courier New", monospace'
   if (photoWave > 0) {
     ctx.fillStyle = photoWave >= MAX_PHOTO_WAVES ? '#ff4444' : '#cc88ff'
-    ctx.fillText(`OLA ${photoWave}/${MAX_PHOTO_WAVES} \u{1F4F8}`, w - 20, 30)
+    ctx.shadowColor = photoWave >= MAX_PHOTO_WAVES ? '#ff0000' : '#9900ff'
+    ctx.shadowBlur = IS_MOBILE ? 4 : 12
+    ctx.fillText(`OLA ${photoWave}/${MAX_PHOTO_WAVES} 📸`, w - 20, 30)
   } else {
     ctx.fillStyle = '#ffcc00'
     ctx.fillText(`NIVEL ${level}`, w - 20, 30)
@@ -761,6 +707,7 @@ function drawHUD(
   // Time bar
   const barW = 200
   const barX = w / 2 - barW / 2
+  ctx.shadowBlur = 0
   ctx.fillStyle = 'rgba(0,0,0,0.5)'
   ctx.fillRect(barX, 16, barW, 10)
   const limitSecs = photoWave > 0 ? 45 : (LEVELS[level - 1]?.timeLimit ?? 30)
@@ -775,7 +722,8 @@ function drawHUD(
   // Lives
   ctx.textAlign = 'right'
   ctx.font = '20px Arial'
-  ctx.fillStyle = '#ff4444'
+  ctx.shadowColor = '#ff4444'
+  ctx.shadowBlur = IS_MOBILE ? 2 : 6
   for (let i = 0; i < lives; i++) {
     ctx.fillText('♥', w - 20 - i * 26, 56)
   }
@@ -784,6 +732,8 @@ function drawHUD(
   if (combo >= 2) {
     ctx.textAlign = 'center'
     ctx.font = `bold ${28 + combo * 4}px "Courier New", monospace`
+    ctx.shadowColor = '#ff00ff'
+    ctx.shadowBlur = IS_MOBILE ? 6 : 20
     ctx.fillStyle = `hsl(${280 + combo * 20}, 100%, 70%)`
     ctx.fillText(`x${combo} COMBO!`, w / 2, 90)
   }
@@ -795,18 +745,18 @@ function drawHUD(
 }
 
 function drawFloatingTexts(ctx: CanvasRenderingContext2D, texts: FloatingText[]) {
-  if (texts.length === 0) return
-  ctx.save()
-  ctx.shadowBlur = 0  // PERF: sin shadow
-  ctx.textAlign = 'center'
-  for (const ft of texts) {
+  texts.forEach(ft => {
     const alpha = ft.life / ft.maxLife
+    ctx.save()
     ctx.globalAlpha = alpha
+    ctx.textAlign = 'center'
     ctx.font = `bold ${ft.size}px "Courier New", monospace`
+    ctx.shadowColor = ft.color
+    ctx.shadowBlur = IS_MOBILE ? 4 : 12
     ctx.fillStyle = ft.color
     ctx.fillText(ft.text, ft.x, ft.y)
-  }
-  ctx.restore()
+    ctx.restore()
+  })
 }
 
 // ─── Main Game Component ──────────────────────────────────────────────────────
@@ -839,12 +789,9 @@ export default function Game() {
   const timeRef         = useRef(0)
   const handLandmarkerRef = useRef<any>(null)
   const screenShakeRef    = useRef(0)
-  const frameCountRef     = useRef(0)         // para throttle de cámara
-  const lastMPTsRef       = useRef(0)         // timestamp del último inference de MediaPipe (ms)
+  const frameCountRef     = useRef(0)         // para throttle de MediaPipe en mobile
   const prevCanvasSizeRef = useRef({ w: 0, h: 0 }) // para detectar rotación de pantalla
   const photoWaveRef      = useRef(1)         // ola actual en modo foto
-  const levelHadTargetsRef = useRef(false)   // guard: evita que el level-complete nunca dispare si todos los targets caen del array simultáneamente
-  const lastMPDurationRef  = useRef(0)       // ms que tardó el último detectForVideo — para throttle adaptativo
 
   // React UI state (only for phase changes)
   const [phase, setPhase] = useState<GamePhase>('loading')
@@ -868,8 +815,7 @@ export default function Game() {
         const { HandLandmarker } = await import('@mediapipe/tasks-vision')
         const MODEL_URL =
           'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
-        // Confidencias más bajas → detecta manos más fácilmente (antes 0.5 cada una)
-        const baseOpts = { numHands: 2, runningMode: 'VIDEO' as const, minHandDetectionConfidence: 0.4, minHandPresenceConfidence: 0.4, minTrackingConfidence: 0.4 }
+        const baseOpts = { numHands: 2, runningMode: 'VIDEO' as const, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 }
 
         // Try GPU first (faster), fallback to CPU for mobile Safari / older devices
         try {
@@ -909,10 +855,9 @@ export default function Game() {
       return
     }
     try {
-      // 640×480 ideal — MediaPipe procesa 4× más rápido que 1280×720
-      // "ideal" es no-obligatorio: si el dispositivo no soporta esa resolución usa la más cercana
+      // Sin restricciones de resolución — iOS falla con ideal widths a veces
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30, max: 30 } },
+        video: { facingMode: 'user' },
         audio: false,
       })
       const video = videoRef.current
@@ -965,7 +910,6 @@ export default function Game() {
     timeLeftRef.current   = cfg.timeLimit
     lastSecondRef.current = Date.now()
     targetsRef.current    = spawnTargets(cfg, W, H)
-    levelHadTargetsRef.current = true   // hay targets — el level-complete ya puede disparar
     particlesRef.current  = []
     floatingTextsRef.current = []
     comboRef.current      = 0
@@ -1077,7 +1021,6 @@ export default function Game() {
 
     photoWaveRef.current     = 1
     targetsRef.current       = spawnPhotoLevel(photoImagesRef.current.length, W, H, 1)
-    levelHadTargetsRef.current = true
     particlesRef.current     = []
     floatingTextsRef.current = []
     prevCanvasSizeRef.current = { w: W, h: H }  // ancla referencia de tamaño
@@ -1171,17 +1114,8 @@ export default function Game() {
     if (phase !== 'playing' && phase !== 'photoLevel') return
 
     let lastTs = performance.now()
-    // PERF: cachear ctx fuera del loop para no llamar getContext cada frame
-    let cachedCtx: CanvasRenderingContext2D | null = null
-    // Reset MediaPipe timestamp para que dispare inmediatamente en el primer frame del nuevo loop
-    lastMPTsRef.current = 0
 
     const loop = (ts: number) => {
-      // Siempre re-programamos el siguiente frame, incluso si hay excepción
-      rafRef.current = requestAnimationFrame(loop)
-
-      try {
-
       const dt = Math.min((ts - lastTs) / 1000, 0.05)
       lastTs = ts
       timeRef.current += dt
@@ -1189,14 +1123,15 @@ export default function Game() {
       const canvas = canvasRef.current
       const video  = videoRef.current
       const hl     = handLandmarkerRef.current
-      if (!canvas || !video || !hl) return
-      if (!cachedCtx) cachedCtx = canvas.getContext('2d')
+      if (!canvas || !video || !hl) {
+        rafRef.current = requestAnimationFrame(loop)
+        return
+      }
 
       // Resize canvas to actual display size (handles device rotation)
       const newCW = canvas.offsetWidth
       const newCH = canvas.offsetHeight
       if (canvas.width !== newCW || canvas.height !== newCH) {
-        cachedCtx = null  // invalidar cache al redimensionar
         const prevW = prevCanvasSizeRef.current.w
         const prevH = prevCanvasSizeRef.current.h
         // Reposicionar targets proporcionalmente para que sigan sobre el estante
@@ -1213,22 +1148,15 @@ export default function Game() {
         }
         canvas.width  = newCW
         canvas.height = newCH
-        cachedCtx = canvas.getContext('2d')  // re-cachear tras resize
         prevCanvasSizeRef.current = { w: newCW, h: newCH }
       }
 
-      const ctx = cachedCtx!
+      const ctx = canvas.getContext('2d')!
       const W = canvas.width, H = canvas.height
 
       frameCountRef.current++
-      // ── Hand detection — throttle ADAPTATIVO ──────────────────────────────────
-      // Si el último detectForVideo tardó Xms, esperamos al menos X*1.5ms antes de
-      // llamarlo de nuevo. Esto evita que bloquee el main thread continuamente en
-      // dispositivos lentos (CPU delegate). Mínimo 60ms, máximo 200ms.
-      const mpThrottle = Math.min(200, Math.max(60, lastMPDurationRef.current * 1.5))
-      if (video.readyState >= 2 && ts - lastMPTsRef.current >= mpThrottle) {
-        lastMPTsRef.current = ts
-        const _mpT0 = performance.now()
+      // ── Hand detection — cada 2 frames en TODOS los dispositivos para evitar freeze ──
+      if (video.readyState >= 2 && frameCountRef.current % 2 === 0) {
         try {
           const results = hl.detectForVideo(video, ts)
           const detectedCount = results.landmarks?.length ?? 0
@@ -1253,17 +1181,12 @@ export default function Game() {
             }
           }
         } catch { /* ignorar errores de frame */ }
-        // Medir duración para el throttle adaptativo del próximo ciclo
-        lastMPDurationRef.current = performance.now() - _mpT0
       }
 
-      // ── Shoot (ambas manos) — limpiamos justShot inmediatamente para evitar disparo múltiple ──
-      gesturesRef.current.forEach((g, hi) => {
-        if (g.justShot) {
-          handleShot(g.aimX, g.aimY)
-          gesturesRef.current[hi] = { ...g, justShot: false }
-        }
-      })
+      // ── Shoot (ambas manos independientes) ──
+      for (const g of gesturesRef.current) {
+        if (g.justShot) handleShot(g.aimX, g.aimY)
+      }
 
       // ── Update targets ──
       const cfg = LEVELS[Math.min(levelRef.current - 1, LEVELS.length - 1)]
@@ -1288,14 +1211,14 @@ export default function Game() {
             t.y = Math.max(t.h / 2 + 20, Math.min(H - t.h / 2 - 20, t.y))
           }
         }
-        // Balloon float — phase offset normalizado para evitar saltos erráticos
+        // Balloon float
         if (t.type === 'balloon') {
-          t.y = t.baseY + Math.sin(timeRef.current * 1.5 + (t.id % 10)) * 14
+          t.y = t.baseY + Math.sin(timeRef.current * 1.5 + t.id) * 15
         }
         return true
       })
 
-      // ── Timer — Date.now() cacheado una vez por frame ──
+      // ── Timer ──
       const now = Date.now()
       if (now - lastSecondRef.current >= 1000) {
         lastSecondRef.current = now
@@ -1319,30 +1242,21 @@ export default function Game() {
       }
 
       // ── Check level complete ──
-      // Usamos levelHadTargetsRef para evitar el bug donde todos los targets caen
-      // del array (t.y > H + h*2) en el mismo frame → targetsRef.current.length === 0
-      // → la condición original nunca dispara → freeze esperando el timer.
       const alive = targetsRef.current.filter(t => !t.falling && !t.hit)
-      const levelShouldComplete = alive.length === 0 && (targetsRef.current.length > 0 || levelHadTargetsRef.current)
-      if (levelShouldComplete) {
-        levelHadTargetsRef.current = false   // reset para evitar double-trigger
-
+      if (alive.length === 0 && targetsRef.current.length > 0) {
+        playLevelUp()
         if (isPhotoModeRef.current) {
           const nextWave = photoWaveRef.current + 1
           if (nextWave > MAX_PHOTO_WAVES) {
-            // ¡Todas las olas completadas!
-            // cancelRAF ANTES de cualquier llamada que pueda fallar
+            // ¡Todas las olas completadas! = máximo logro
             cancelAnimationFrame(rafRef.current)
-            try { playLevelUp() } catch { /* audio no es crítico */ }
             setFinalScore(scoreRef.current)
             setPhase('photoLevelEnd')
             return
           } else {
             // Nueva ola — spawn inmediato, loop continúa sin interrupción
-            try { playLevelUp() } catch { /* audio no es crítico */ }
             photoWaveRef.current = nextWave
             targetsRef.current = spawnPhotoLevel(photoImagesRef.current.length, W, H, nextWave)
-            levelHadTargetsRef.current = true   // nueva ola tiene targets
             particlesRef.current = []
             const waveColor = nextWave >= MAX_PHOTO_WAVES ? '#ff4444' : '#ff00ff'
             floatingTextsRef.current.push({
@@ -1353,10 +1267,7 @@ export default function Game() {
             // No return — el loop RAF continúa con los nuevos targets
           }
         } else {
-          // CRÍTICO: cancelRAF ANTES de playLevelUp — si playLevelUp lanza error,
-          // el RAF ya está cancelado y no se queda corriendo con 0 targets
           cancelAnimationFrame(rafRef.current)
-          try { playLevelUp() } catch { /* audio no es crítico */ }
           const nextLvl = levelRef.current + 1
           if (nextLvl > LEVELS.length) {
             setFinalScore(scoreRef.current)
@@ -1371,8 +1282,8 @@ export default function Game() {
       // ── Timer: en modo foto, tiempo agotado = fin (sin perder vidas) ──
       // (La lógica de timer normal ya está arriba; aquí sólo sobreescribimos el comportamiento)
 
-      // ── Update particles (cap en 60 para evitar saturación GPU) ──
-      particlesRef.current = particlesRef.current.filter(p => p.life > 0).slice(-60)
+      // ── Update particles ──
+      particlesRef.current = particlesRef.current.filter(p => p.life > 0)
       particlesRef.current.forEach(p => {
         p.x += p.vx * dt
         p.y += p.vy * dt
@@ -1404,37 +1315,35 @@ export default function Game() {
       // Background
       drawBackground(ctx, W, H, timeRef.current)
 
-      // Targets — PERF: ctx.drawImage desde cachedCanvas elimina createGradient en hot path
-      const pad = 4
+      // Camera feed (mirrored, subtle background) — omitido en mobile para rendimiento
+      if (video.readyState >= 2 && !IS_MOBILE) {
+        ctx.save()
+        ctx.globalAlpha = 0.13
+        ctx.translate(W, 0)
+        ctx.scale(-1, 1)
+        ctx.drawImage(video, 0, 0, W, H)
+        ctx.restore()
+      }
+
+      // Targets
       targetsRef.current.forEach(t => {
         ctx.save()
         ctx.translate(t.x, t.y)
         ctx.rotate(t.rotation)
         const alpha = t.falling ? Math.max(0, 1 - (Date.now() - t.hitTime) / 400) : 1
-
-        if (t.type === 'photo') {
+        if (t.type === 'bottle') {
+          drawBottle(ctx, 0, 0, t.w, t.h, t.color, alpha)
+        } else if (t.type === 'can') {
+          drawCan(ctx, 0, 0, t.w, t.h, t.color, alpha)
+        } else if (t.type === 'photo') {
           const img = t.photoIndex !== undefined ? photoImagesRef.current[t.photoIndex] : null
-          if (img) drawPhotoTarget(ctx, img, t.w / 2, alpha, timeRef.current, 0)
-        } else if (t.cachedCanvas) {
-          // Ruta rápida: drawImage desde canvas pre-renderizado (sin gradients en caliente)
-          ctx.globalAlpha = alpha
-          if (t.type === 'balloon') {
-            // Centro del globo está en (r+pad, r+pad) dentro del canvas pre-renderizado
-            ctx.drawImage(t.cachedCanvas, -(t.w / 2 + pad), -(t.w / 2 + pad))
-          } else {
-            // Botellas y latas: centro en (w/2+pad, h/2+pad)
-            ctx.drawImage(t.cachedCanvas, -(t.w / 2 + pad), -(t.h / 2 + pad))
+          if (img) {
+            drawPhotoTarget(ctx, img, t.w / 2, alpha, timeRef.current, 0)
           }
         } else {
-          // Fallback (solo SSR o si prerenderTarget falló) — crea gradients en caliente
-          if (t.type === 'bottle') {
-            drawBottle(ctx, 0, 0, t.w, t.h, t.color, alpha)
-          } else if (t.type === 'can') {
-            drawCan(ctx, 0, 0, t.w, t.h, t.color, alpha)
-          } else {
-            ctx.translate(-t.x, -t.y)
-            drawBalloon(ctx, t.x, t.y, t.w / 2, t.color, alpha, timeRef.current)
-          }
+          ctx.translate(-t.x, -t.y) // drawBalloon handles its own translate
+          drawBalloon(ctx, t.x, t.y, t.w / 2, t.color, alpha, timeRef.current)
+          ctx.translate(t.x, t.y)
         }
         ctx.restore()
       })
@@ -1473,10 +1382,7 @@ export default function Game() {
         ctx.restore()
       }
 
-      } catch (err) {
-        console.error('[FingerGun] error en game loop:', err)
-        // El siguiente frame ya fue programado arriba — el juego continúa
-      }
+      rafRef.current = requestAnimationFrame(loop)
     }
 
     rafRef.current = requestAnimationFrame(loop)
@@ -1490,11 +1396,6 @@ export default function Game() {
     startLevel(next)
     setPhase('playing')
   }, [startLevel])
-
-  const goToMenu = useCallback(() => {
-    cancelAnimationFrame(rafRef.current)
-    setPhase('ready')
-  }, [])
 
   // ── Iniciar según modo seleccionado ──────────────────────────────────────
 
@@ -1529,23 +1430,18 @@ export default function Game() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Video — se muestra como fondo CSS durante el juego (sin tocar la GPU del canvas) */}
+      {/* Hidden video */}
+      {/* Video off-screen pero no display:none — iOS necesita que sea "visible" para capturar frames */}
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full pointer-events-none"
-        style={{
-          opacity: (phase === 'playing' || phase === 'photoLevel') && !IS_MOBILE ? 0.12 : 0,
-          transform: 'scaleX(-1)',           // espejo para cámara frontal
-          objectFit: 'cover',
-          zIndex: 0,
-        }}
+        className="absolute -top-full -left-full w-px h-px opacity-0 pointer-events-none"
         playsInline
         muted
         autoPlay
       />
 
-      {/* Game canvas — z-index encima del video, pointerEvents none para no bloquear UI */}
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ zIndex: 1, pointerEvents: 'none' }} />
+      {/* Game canvas */}
+      <canvas ref={canvasRef} className="w-full h-full" />
 
       {/* ── Loading ── */}
       {phase === 'loading' && (
@@ -1764,15 +1660,9 @@ export default function Game() {
           <p className="text-gray-400 mb-8">pts acumulados</p>
           <button
             onClick={goNextLevel}
-            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-xl px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40 mb-4"
+            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-xl px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40"
           >
             NIVEL {Math.min(levelRef.current + 1, LEVELS.length)} →
-          </button>
-          <button
-            onClick={goToMenu}
-            className="text-gray-500 hover:text-white text-sm tracking-widest transition-colors"
-          >
-            ← MENÚ PRINCIPAL
           </button>
         </div>
       )}
@@ -1794,12 +1684,6 @@ export default function Game() {
           >
             JUGAR DE NUEVO
           </button>
-          <button
-            onClick={goToMenu}
-            className="text-gray-500 hover:text-white text-sm tracking-widest transition-colors"
-          >
-            ← MENÚ PRINCIPAL
-          </button>
         </div>
       )}
 
@@ -1817,7 +1701,7 @@ export default function Game() {
               onChange={handlePhotoUpload}
             />
             <div className="relative">
-              {/* PERF: sin animate-ping — causaba repaint CSS continuo compitiendo con canvas */}
+              <div className="absolute inset-0 rounded-full bg-orange-500 opacity-25 animate-ping" />
               <div className="relative bg-orange-500 hover:bg-orange-400 active:scale-90 transition-all text-white rounded-full w-14 h-14 flex items-center justify-center text-2xl shadow-xl shadow-orange-500/40">
                 📸
               </div>
@@ -1868,7 +1752,7 @@ export default function Game() {
           </p>
           <p className="text-6xl font-black mb-1">{finalScore.toString().padStart(7, '0')}</p>
           <p className="text-gray-400 mb-8">puntos totales</p>
-          <div className="flex gap-4 mb-5">
+          <div className="flex gap-4">
             <button
               onClick={startPhotoLevel}
               className="bg-purple-600 hover:bg-purple-500 text-white font-black text-lg px-8 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-purple-500/40"
@@ -1882,12 +1766,6 @@ export default function Game() {
               🎮 JUEGO NORMAL
             </button>
           </div>
-          <button
-            onClick={goToMenu}
-            className="text-gray-500 hover:text-white text-sm tracking-widest transition-colors"
-          >
-            ← MENÚ PRINCIPAL
-          </button>
         </div>
       )}
     </div>
