@@ -51,7 +51,7 @@ export interface Translation {
 
 export const LANGS: { code: Lang; flag: string; name: string }[] = [
   { code: 'es', flag: '🇪🇸', name: 'Español'   },
-  { code: 'en', flag: '🇺🇸', name: 'English'   },
+  { code: 'en', flag: '🇬🇧', name: 'English'   },
   { code: 'zh', flag: '🇨🇳', name: '中文'       },
   { code: 'ru', flag: '🇷🇺', name: 'Русский'   },
   { code: 'ja', flag: '🇯🇵', name: '日本語'     },

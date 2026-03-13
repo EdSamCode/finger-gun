@@ -793,13 +793,13 @@ export default function Game() {
   // ── Idioma ────────────────────────────────────────────────────────────────
   const [lang, setLang] = useState<Lang>(() => (typeof window !== 'undefined' ? detectLang() : 'es'))
   const langRef = useRef<Lang>(lang)
+  langRef.current = lang  // actualización síncrona en cada render — el loop RAF siempre lee el idioma correcto
   useEffect(() => {
-    langRef.current = lang
     if (typeof window !== 'undefined') localStorage.setItem('fg_lang', lang)
   }, [lang])
-  // Helper: t(key, vars?)
-  const t = useCallback((key: keyof typeof T['es'], vars?: Record<string, string | number>) =>
-    tr(T[lang], key, vars), [lang])
+  // Helper: función simple, sin useCallback — siempre lee lang del render actual
+  const t = (key: keyof typeof T['es'], vars?: Record<string, string | number>) =>
+    tr(T[lang], key, vars)
 
   // React UI state (only for phase changes)
   const [phase, setPhase] = useState<GamePhase>('loading')
