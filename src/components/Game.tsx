@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { detectGesture, makeInitialGestureState, type Landmark, type GestureResult, type GestureTrackerState } from '@/lib/gestures'
 import { playShot, playGlassBreak, playCombo, playLevelUp, playMiss, resumeAudio } from '@/lib/audio'
+import { T, LANGS, tr, detectLang, type Lang } from '@/lib/i18n'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -352,10 +353,6 @@ function drawBalloon(ctx: CanvasRenderingContext2D, x: number, y: number, r: num
   ctx.globalAlpha = alpha
   ctx.translate(x, y)
 
-  // Bobbing
-  const bob = Math.sin(t * 2 + x) * 4
-  ctx.translate(0, bob)
-
   const grad = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 1, 0, 0, r)
   grad.addColorStop(0,   '#fff')
   grad.addColorStop(0.3, color)
@@ -679,6 +676,7 @@ function drawHUD(
   lives: number,
   isAiming: boolean,
   photoWave: number = 0,   // >0 = estamos en modo foto, indica la ola actual
+  topRightLabel = '',      // texto traducido para top-right (nivel u ola)
 ) {
   ctx.save()
   ctx.shadowBlur = 0
@@ -691,18 +689,17 @@ function drawHUD(
   ctx.shadowBlur = IS_MOBILE ? 3 : 8
   ctx.fillText(`${score.toString().padStart(7, '0')}`, 20, 44)
 
-  // Level / Ola — top right
+  // Level / Ola — top right (texto ya formateado y traducido)
   ctx.textAlign = 'right'
   ctx.font = 'bold 18px "Courier New", monospace'
   if (photoWave > 0) {
     ctx.fillStyle = photoWave >= MAX_PHOTO_WAVES ? '#ff4444' : '#cc88ff'
     ctx.shadowColor = photoWave >= MAX_PHOTO_WAVES ? '#ff0000' : '#9900ff'
     ctx.shadowBlur = IS_MOBILE ? 4 : 12
-    ctx.fillText(`OLA ${photoWave}/${MAX_PHOTO_WAVES} 📸`, w - 20, 30)
   } else {
     ctx.fillStyle = '#ffcc00'
-    ctx.fillText(`NIVEL ${level}`, w - 20, 30)
   }
+  ctx.fillText(topRightLabel || `NIVEL ${level}`, w - 20, 30)
 
   // Time bar
   const barW = 200
@@ -792,6 +789,17 @@ export default function Game() {
   const frameCountRef     = useRef(0)         // para throttle de MediaPipe en mobile
   const prevCanvasSizeRef = useRef({ w: 0, h: 0 }) // para detectar rotación de pantalla
   const photoWaveRef      = useRef(1)         // ola actual en modo foto
+
+  // ── Idioma ────────────────────────────────────────────────────────────────
+  const [lang, setLang] = useState<Lang>(() => (typeof window !== 'undefined' ? detectLang() : 'es'))
+  const langRef = useRef<Lang>(lang)
+  useEffect(() => {
+    langRef.current = lang
+    if (typeof window !== 'undefined') localStorage.setItem('fg_lang', lang)
+  }, [lang])
+  // Helper: t(key, vars?)
+  const t = useCallback((key: keyof typeof T['es'], vars?: Record<string, string | number>) =>
+    tr(T[lang], key, vars), [lang])
 
   // React UI state (only for phase changes)
   const [phase, setPhase] = useState<GamePhase>('loading')
@@ -1224,20 +1232,22 @@ export default function Game() {
         lastSecondRef.current = now
         timeLeftRef.current -= 1
         if (timeLeftRef.current <= 0) {
-          cancelAnimationFrame(rafRef.current)
           if (isPhotoModeRef.current) {
+            cancelAnimationFrame(rafRef.current)
             setFinalScore(scoreRef.current)
             setPhase('photoLevelEnd')
-          } else {
-            livesRef.current -= 1
-            if (livesRef.current <= 0) {
-              setFinalScore(scoreRef.current)
-              setPhase('gameOver')
-            } else {
-              startLevel(levelRef.current)
-            }
+            return
           }
-          return
+          livesRef.current -= 1
+          if (livesRef.current <= 0) {
+            cancelAnimationFrame(rafRef.current)
+            setFinalScore(scoreRef.current)
+            setPhase('gameOver')
+            return
+          }
+          // Vidas restantes: reiniciar nivel. Sin return → el frame sigue hasta
+          // requestAnimationFrame(loop) al final, manteniendo el loop vivo.
+          startLevel(levelRef.current)
         }
       }
 
@@ -1261,7 +1271,7 @@ export default function Game() {
             const waveColor = nextWave >= MAX_PHOTO_WAVES ? '#ff4444' : '#ff00ff'
             floatingTextsRef.current.push({
               x: W / 2, y: H / 2 - 10, vy: -22,
-              text: nextWave >= MAX_PHOTO_WAVES ? `⚡ OLA FINAL!` : `⚡ OLA ${nextWave}!`,
+              text: nextWave >= MAX_PHOTO_WAVES ? T[langRef.current].wave_final : tr(T[langRef.current], 'wave_num', { n: nextWave }),
               color: waveColor, life: 2.5, maxLife: 2.5, size: 44,
             })
             // No return — el loop RAF continúa con los nuevos targets
@@ -1368,7 +1378,11 @@ export default function Game() {
 
       // HUD
       ctx.restore() // un-shake
-      drawHUD(ctx, W, H, scoreRef.current, comboRef.current, levelRef.current, timeLeftRef.current, livesRef.current, anyHandVisible, isPhotoModeRef.current ? photoWaveRef.current : 0)
+      const _tl = T[langRef.current]
+      const _hudTopRight = isPhotoModeRef.current
+        ? tr(_tl, 'wave_hud', { w: photoWaveRef.current, max: MAX_PHOTO_WAVES })
+        : tr(_tl, 'level_hud', { n: levelRef.current })
+      drawHUD(ctx, W, H, scoreRef.current, comboRef.current, levelRef.current, timeLeftRef.current, livesRef.current, anyHandVisible, isPhotoModeRef.current ? photoWaveRef.current : 0, _hudTopRight)
 
       // Hand hint si no se ve ninguna mano
       if (!anyHandVisible) {
@@ -1378,7 +1392,7 @@ export default function Game() {
         ctx.fillStyle = 'rgba(255,255,255,0.45)'
         ctx.shadowColor = '#fff'
         ctx.shadowBlur = 4
-        ctx.fillText('✊  Puño cerrado = apuntar   🖐️  Abrir la mano = DISPARAR', W / 2, H - 20)
+        ctx.fillText(T[langRef.current].hint, W / 2, H - 20)
         ctx.restore()
       }
 
@@ -1453,36 +1467,45 @@ export default function Game() {
               <div key={i} className="w-3 h-3 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
             ))}
           </div>
-          <p className="mt-4 text-sm text-gray-400">Cargando detector de manos...</p>
+          <p className="mt-4 text-sm text-gray-400">{t('loading')}</p>
         </div>
       )}
 
       {/* ── Permission ── */}
       {phase === 'permission' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white px-8">
+          {/* Selector de idioma */}
+          <div className="absolute top-4 right-4 flex flex-wrap justify-end gap-1 max-w-[200px]">
+            {LANGS.map(l => (
+              <button key={l.code} onClick={() => setLang(l.code)} title={l.name}
+                className={`text-lg transition-all duration-150 ${lang === l.code ? 'scale-125 drop-shadow-lg' : 'opacity-30 hover:opacity-70'}`}>
+                {l.flag}
+              </button>
+            ))}
+          </div>
           <div className="text-8xl mb-6">✌️</div>
           <h1 className="text-4xl font-black tracking-widest mb-2 text-orange-400">FINGER GUN</h1>
-          <p className="text-gray-300 text-center mb-2">Dispara botellas con tu mano</p>
+          <p className="text-gray-300 text-center mb-2">{t('title_sub')}</p>
           <p className="text-gray-500 text-sm text-center mb-8">
-            Necesito acceso a tu cámara para detectar tus dedos.<br/>
-            Nada se graba ni se envía.
+            {t('camera_intro_1')}<br/>
+            {t('camera_intro_2')}
           </p>
           <div className="text-left bg-gray-900 rounded-xl p-5 mb-8 max-w-xs w-full">
-            <p className="text-sm text-gray-300 font-bold mb-3">Cómo jugar:</p>
+            <p className="text-sm text-gray-300 font-bold mb-3">{t('how_to_play')}</p>
             <div className="flex items-center gap-3 mb-2">
               <span className="text-2xl">✊</span>
-              <span className="text-sm text-gray-400">Puño cerrado = apuntar (mira aparece)</span>
+              <span className="text-sm text-gray-400">{t('fist_aim')}</span>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-2xl">🖐️</span>
-              <span className="text-sm text-gray-400">Abrir la mano = ¡BOOM! disparo</span>
+              <span className="text-sm text-gray-400">{t('open_shoot')}</span>
             </div>
           </div>
           <button
             onClick={startCamera}
-            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-xl px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40"
+            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-8 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40 whitespace-nowrap"
           >
-            ACTIVAR CÁMARA
+            {t('activate_camera')}
           </button>
         </div>
       )}
@@ -1493,8 +1516,17 @@ export default function Game() {
 
           {/* Header — minimal, floating */}
           <div className="absolute top-0 left-0 right-0 z-10 pt-7 text-center pointer-events-none">
-            <p className="text-[10px] tracking-[0.45em] text-gray-600 uppercase mb-1">Elige tu modo</p>
+            <p className="text-[10px] tracking-[0.45em] text-gray-600 uppercase mb-1">{t('choose_mode')}</p>
             <h1 className="text-xl font-black tracking-[0.2em] text-white">FINGER GUN</h1>
+          </div>
+          {/* Selector de idioma — top right */}
+          <div className="absolute top-3 right-3 z-20 flex flex-wrap justify-end gap-1 max-w-[180px]">
+            {LANGS.map(l => (
+              <button key={l.code} onClick={() => setLang(l.code)} title={l.name}
+                className={`text-base transition-all duration-150 ${lang === l.code ? 'scale-125 drop-shadow-lg' : 'opacity-25 hover:opacity-60'}`}>
+                {l.flag}
+              </button>
+            ))}
           </div>
 
           {/* Split panels */}
@@ -1526,9 +1558,9 @@ export default function Game() {
                   className="text-2xl sm:text-3xl font-black tracking-widest mb-2"
                   style={{ color: selectedMode === 'classic' ? '#fb923c' : '#6b7280' }}
                 >
-                  CLÁSICO
+                  {t('classic')}
                 </h2>
-                <p className="text-[11px] tracking-widest text-gray-600 uppercase">5 niveles · Dificultad creciente</p>
+                <p className="text-[11px] tracking-widest text-gray-600 uppercase">{t('classic_desc')}</p>
               </div>
 
               {/* Indicador seleccionado */}
@@ -1562,9 +1594,9 @@ export default function Game() {
                   className="text-2xl sm:text-3xl font-black tracking-widest mb-2"
                   style={{ color: selectedMode === 'photo' ? '#c084fc' : '#6b7280' }}
                 >
-                  MIS FOTOS
+                  {t('my_photos')}
                 </h2>
-                <p className="text-[11px] tracking-widest text-gray-600 uppercase">Hasta {MAX_PHOTOS} imágenes · 3 olas</p>
+                <p className="text-[11px] tracking-widest text-gray-600 uppercase">{t('photo_desc', { n: MAX_PHOTOS })}</p>
               </div>
 
               {/* Upload zone — aparece solo cuando está seleccionado */}
@@ -1597,15 +1629,15 @@ export default function Game() {
                 >
                   {numPhotos === 0 ? (
                     <p className="text-gray-500 text-xs tracking-wide">
-                      {IS_MOBILE ? '📷 Toca para elegir fotos' : '📷 Clic o arrastra fotos aquí'}
+                      {IS_MOBILE ? t('tap_photos') : t('click_photos')}
                     </p>
                   ) : (
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-purple-400 text-xs font-bold tracking-wide">
-                        {numPhotos}/{MAX_PHOTOS} fotos ✓
+                        {t('photo_count', { n: numPhotos, max: MAX_PHOTOS })}
                       </span>
                       {numPhotos < MAX_PHOTOS && (
-                        <span className="text-gray-600 text-[11px]">+ añadir</span>
+                        <span className="text-gray-600 text-[11px]">{t('add_more')}</span>
                       )}
                     </div>
                   )}
@@ -1615,7 +1647,7 @@ export default function Game() {
                     onClick={e => { e.stopPropagation(); clearPhotos() }}
                     className="mt-1.5 w-full text-center text-gray-700 text-[10px] tracking-widest hover:text-red-500 transition-colors uppercase"
                   >
-                    × Borrar fotos
+                    {t('clear_photos')}
                   </button>
                 )}
               </div>
@@ -1643,9 +1675,9 @@ export default function Game() {
                     : 'bg-orange-500 hover:bg-orange-400 text-black shadow-[0_0_40px_rgba(249,115,22,0.45)]'
               }`}
             >
-              {selectedMode === 'photo' && numPhotos === 0 ? 'SUBE UNA FOTO' : 'JUGAR'}
+              {selectedMode === 'photo' && numPhotos === 0 ? t('upload_photo') : t('play')}
             </button>
-            <p className="text-gray-800 text-[9px] tracking-[0.4em] uppercase">Espacio · Enter</p>
+            <p className="text-gray-800 text-[9px] tracking-[0.4em] uppercase">{t('space_enter')}</p>
           </div>
 
         </div>
@@ -1655,14 +1687,14 @@ export default function Game() {
       {phase === 'levelComplete' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 text-white">
           <div className="text-7xl mb-4">🏆</div>
-          <p className="text-orange-400 font-black text-xl tracking-widest mb-1">NIVEL {levelRef.current} COMPLETADO</p>
+          <p className="text-orange-400 font-black text-xl tracking-widest mb-1">{t('level_completed', { n: levelRef.current })}</p>
           <p className="text-5xl font-black mb-2">{scoreRef.current.toString().padStart(7, '0')}</p>
-          <p className="text-gray-400 mb-8">pts acumulados</p>
+          <p className="text-gray-400 mb-8">{t('accum_pts')}</p>
           <button
             onClick={goNextLevel}
-            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-xl px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40"
+            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-8 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40 whitespace-nowrap"
           >
-            NIVEL {Math.min(levelRef.current + 1, LEVELS.length)} →
+            {t('next_level', { n: Math.min(levelRef.current + 1, LEVELS.length) })}
           </button>
         </div>
       )}
@@ -1674,15 +1706,15 @@ export default function Game() {
             {finalScore > 1500 ? '🔥' : finalScore > 700 ? '👍' : '💪'}
           </div>
           <p className="text-red-400 font-black text-2xl tracking-widest mb-2">
-            {finalScore > 1500 ? '¡INCREÍBLE!' : finalScore > 700 ? '¡BIEN HECHO!' : 'GAME OVER'}
+            {finalScore > 1500 ? t('incredible') : finalScore > 700 ? t('well_done') : t('game_over')}
           </p>
           <p className="text-6xl font-black mb-1">{finalScore.toString().padStart(7, '0')}</p>
-          <p className="text-gray-400 mb-10">puntos finales</p>
+          <p className="text-gray-400 mb-10">{t('final_pts')}</p>
           <button
             onClick={startGame}
-            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-xl px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40 mb-4"
+            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-8 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40 mb-4 whitespace-nowrap"
           >
-            JUGAR DE NUEVO
+            {t('play_again')}
           </button>
         </div>
       )}
@@ -1730,9 +1762,9 @@ export default function Game() {
           <div className="absolute inset-4 rounded-3xl border-4 border-dashed border-orange-400 bg-orange-500/10 animate-pulse" />
           <div className="text-7xl mb-4">🎯</div>
           <p className="text-orange-400 text-3xl font-black tracking-widest drop-shadow-lg">
-            SUELTA LA IMAGEN
+            {t('drop_image')}
           </p>
-          <p className="text-orange-300 text-sm mt-2 opacity-70">Se añadirá como objetivo</p>
+          <p className="text-orange-300 text-sm mt-2 opacity-70">{t('will_be_added')}</p>
         </div>
       )}
 
@@ -1743,27 +1775,27 @@ export default function Game() {
             {photoWaveRef.current >= MAX_PHOTO_WAVES ? '🔥' : '🏆'}
           </div>
           <p className={`font-black text-2xl tracking-widest mb-1 ${photoWaveRef.current >= MAX_PHOTO_WAVES ? 'text-red-400' : 'text-purple-400'}`}>
-            {photoWaveRef.current >= MAX_PHOTO_WAVES ? '¡MAESTRO DE TIRO!' : 'GALERÍA DESTRUIDA'}
+            {photoWaveRef.current >= MAX_PHOTO_WAVES ? t('shooting_master') : t('gallery_destroyed')}
           </p>
           <p className="text-gray-500 text-sm mb-3 tracking-wider">
             {photoWaveRef.current >= MAX_PHOTO_WAVES
-              ? `¡COMPLETASTE LAS ${MAX_PHOTO_WAVES} OLAS!`
-              : `OLA ${photoWaveRef.current} DE ${MAX_PHOTO_WAVES}`}
+              ? t('completed_waves', { n: MAX_PHOTO_WAVES })
+              : t('wave_of', { w: photoWaveRef.current, n: MAX_PHOTO_WAVES })}
           </p>
           <p className="text-6xl font-black mb-1">{finalScore.toString().padStart(7, '0')}</p>
-          <p className="text-gray-400 mb-8">puntos totales</p>
+          <p className="text-gray-400 mb-8">{t('total_pts')}</p>
           <div className="flex gap-4">
             <button
               onClick={startPhotoLevel}
-              className="bg-purple-600 hover:bg-purple-500 text-white font-black text-lg px-8 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-purple-500/40"
+              className="bg-purple-600 hover:bg-purple-500 text-white font-black text-base px-6 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-purple-500/40 whitespace-nowrap"
             >
-              🔄 REPETIR
+              {t('repeat')}
             </button>
             <button
               onClick={startGame}
-              className="bg-orange-500 hover:bg-orange-400 text-black font-black text-lg px-8 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40"
+              className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-6 py-4 rounded-2xl transition-all active:scale-95 shadow-lg shadow-orange-500/40 whitespace-nowrap"
             >
-              🎮 JUEGO NORMAL
+              {t('normal_game')}
             </button>
           </div>
         </div>
