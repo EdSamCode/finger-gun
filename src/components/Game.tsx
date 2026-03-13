@@ -1503,7 +1503,7 @@ export default function Game() {
           </div>
           <button
             onClick={startCamera}
-            className="bg-orange-500 hover:bg-orange-400 text-black font-bold text-sm tracking-widest uppercase px-10 py-3 rounded-full transition-all active:scale-95 shadow-lg shadow-orange-500/40 whitespace-nowrap"
+            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-[0_0_30px_rgba(249,115,22,0.55)] min-w-[220px] text-center whitespace-nowrap"
           >
             {t('activate_camera')}
           </button>
@@ -1692,7 +1692,7 @@ export default function Game() {
           <p className="text-gray-400 mb-8">{t('accum_pts')}</p>
           <button
             onClick={goNextLevel}
-            className="bg-orange-500 hover:bg-orange-400 text-black font-bold text-sm tracking-widest uppercase px-10 py-3 rounded-full transition-all active:scale-95 shadow-lg shadow-orange-500/40 whitespace-nowrap"
+            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-[0_0_30px_rgba(249,115,22,0.55)] min-w-[220px] text-center whitespace-nowrap"
           >
             {t('next_level', { n: Math.min(levelRef.current + 1, LEVELS.length) })}
           </button>
@@ -1712,7 +1712,7 @@ export default function Game() {
           <p className="text-gray-400 mb-10">{t('final_pts')}</p>
           <button
             onClick={startGame}
-            className="bg-orange-500 hover:bg-orange-400 text-black font-bold text-sm tracking-widest uppercase px-10 py-3 rounded-full transition-all active:scale-95 shadow-lg shadow-orange-500/40 mb-4 whitespace-nowrap"
+            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-[0_0_30px_rgba(249,115,22,0.55)] min-w-[220px] text-center whitespace-nowrap mb-4"
           >
             {t('play_again')}
           </button>
@@ -1787,13 +1787,13 @@ export default function Game() {
           <div className="flex gap-4">
             <button
               onClick={startPhotoLevel}
-              className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm tracking-widest uppercase px-8 py-3 rounded-full transition-all active:scale-95 shadow-lg shadow-purple-500/40 whitespace-nowrap"
+              className="bg-purple-600 hover:bg-purple-500 text-white font-black text-base px-10 py-4 rounded-2xl transition-all active:scale-95 shadow-[0_0_30px_rgba(147,51,234,0.55)] min-w-[160px] text-center whitespace-nowrap"
             >
               {t('repeat')}
             </button>
             <button
               onClick={startGame}
-              className="bg-orange-500 hover:bg-orange-400 text-black font-bold text-sm tracking-widest uppercase px-8 py-3 rounded-full transition-all active:scale-95 shadow-lg shadow-orange-500/40 whitespace-nowrap"
+              className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-10 py-4 rounded-2xl transition-all active:scale-95 shadow-[0_0_30px_rgba(249,115,22,0.55)] min-w-[160px] text-center whitespace-nowrap"
             >
               {t('normal_game')}
             </button>
