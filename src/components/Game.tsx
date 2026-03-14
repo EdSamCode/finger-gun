@@ -1492,26 +1492,26 @@ export default function Game() {
           </div>
 
           {/* Emoji con glow orb */}
-          <div className="relative flex items-center justify-center" style={{ marginBottom: '3rem' }}>
+          <div className="relative flex items-center justify-center" style={{ marginBottom: '1.75rem' }}>
             <div className="absolute w-52 h-52 rounded-full bg-orange-500 opacity-15 blur-3xl animate-pulse" />
             <div className="relative text-9xl select-none drop-shadow-2xl">✌️</div>
           </div>
 
           {/* Título + subtítulo */}
-          <h1 className="text-5xl font-black tracking-[0.18em]" style={{ marginBottom: '0.6rem',
+          <h1 className="text-5xl font-black tracking-[0.18em]" style={{ marginBottom: '0.5rem',
             background: 'linear-gradient(135deg, #fb923c 0%, #fbbf24 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             FINGER GUN
           </h1>
-          <p className="text-gray-400 text-sm tracking-widest uppercase text-center" style={{ marginBottom: '0.5rem' }}>{t('title_sub')}</p>
-          <p className="text-gray-600 text-xs text-center max-w-[280px] leading-relaxed" style={{ marginBottom: '3rem' }}>
+          <p className="text-gray-400 text-sm tracking-widest uppercase text-center" style={{ marginBottom: '0.35rem' }}>{t('title_sub')}</p>
+          <p className="text-gray-600 text-xs text-center max-w-[280px] leading-relaxed" style={{ marginBottom: '1.75rem' }}>
             {t('camera_intro_1')} {t('camera_intro_2')}
           </p>
 
           {/* Card instrucciones */}
-          <div className="max-w-xs w-full rounded-2xl px-6 py-6" style={{ marginBottom: '3rem',
+          <div className="max-w-xs w-full rounded-2xl px-6 py-5" style={{ marginBottom: '1.75rem',
             background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(249,115,22,0.18)' }}>
-            <p className="text-[10px] text-orange-400 font-bold tracking-[0.3em] uppercase" style={{ marginBottom: '1.25rem' }}>{t('how_to_play')}</p>
-            <div className="flex items-center gap-4" style={{ marginBottom: '1rem' }}>
+            <p className="text-[10px] text-orange-400 font-bold tracking-[0.3em] uppercase" style={{ marginBottom: '1rem' }}>{t('how_to_play')}</p>
+            <div className="flex items-center gap-4" style={{ marginBottom: '0.85rem' }}>
               <span className="text-2xl w-8 shrink-0 text-center">✊</span>
               <span className="text-sm text-gray-300 leading-snug">{t('fist_aim')}</span>
             </div>
