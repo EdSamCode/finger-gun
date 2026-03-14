@@ -1478,9 +1478,11 @@ export default function Game() {
 
       {/* ── Permission ── */}
       {phase === 'permission' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white px-8">
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white overflow-hidden px-6"
+          style={{ background: 'radial-gradient(ellipse at 50% 55%, rgba(249,115,22,0.13) 0%, rgba(0,0,0,1) 68%)' }}>
+
           {/* Selector de idioma */}
-          <div className="absolute top-4 right-4 flex flex-wrap justify-end gap-1 max-w-[200px]">
+          <div className="absolute top-4 right-4 flex flex-wrap justify-end gap-1 max-w-[200px] z-10">
             {LANGS.map(l => (
               <button key={l.code} onClick={() => setLang(l.code)} title={l.name}
                 className={`text-lg transition-all duration-150 ${lang === l.code ? 'scale-125 drop-shadow-lg' : 'opacity-30 hover:opacity-70'}`}>
@@ -1488,27 +1490,46 @@ export default function Game() {
               </button>
             ))}
           </div>
-          <div className="text-8xl mb-6">✌️</div>
-          <h1 className="text-4xl font-black tracking-widest mb-2 text-orange-400">FINGER GUN</h1>
-          <p className="text-gray-300 text-center mb-2">{t('title_sub')}</p>
-          <p className="text-gray-500 text-sm text-center mb-8">
-            {t('camera_intro_1')}<br/>
-            {t('camera_intro_2')}
+
+          {/* Emoji con glow orb */}
+          <div className="relative mb-7 flex items-center justify-center">
+            <div className="absolute w-40 h-40 rounded-full bg-orange-500 opacity-15 blur-3xl animate-pulse" />
+            <div className="relative text-8xl select-none drop-shadow-2xl">✌️</div>
+          </div>
+
+          {/* Título con gradiente */}
+          <h1 className="text-5xl font-black tracking-[0.18em] mb-2"
+            style={{ background: 'linear-gradient(135deg, #fb923c 0%, #fbbf24 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            FINGER GUN
+          </h1>
+
+          {/* Subtítulo */}
+          <p className="text-gray-400 text-sm tracking-widest uppercase text-center mb-1">{t('title_sub')}</p>
+
+          {/* Aviso cámara */}
+          <p className="text-gray-600 text-xs text-center mb-8 max-w-[280px] leading-relaxed">
+            {t('camera_intro_1')} {t('camera_intro_2')}
           </p>
-          <div className="text-left bg-gray-900 rounded-xl p-5 mb-8 max-w-xs w-full">
-            <p className="text-sm text-gray-300 font-bold mb-3">{t('how_to_play')}</p>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-2xl">✊</span>
-              <span className="text-sm text-gray-400">{t('fist_aim')}</span>
+
+          {/* Card instrucciones */}
+          <div className="mb-9 max-w-xs w-full rounded-2xl px-5 py-4"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(249,115,22,0.18)' }}>
+            <p className="text-[10px] text-orange-400 font-bold tracking-[0.3em] uppercase mb-4">{t('how_to_play')}</p>
+            <div className="flex items-center gap-4 mb-3">
+              <span className="text-2xl w-8 shrink-0 text-center">✊</span>
+              <span className="text-sm text-gray-300 leading-snug">{t('fist_aim')}</span>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🖐️</span>
-              <span className="text-sm text-gray-400">{t('open_shoot')}</span>
+            <div className="flex items-center gap-4">
+              <span className="text-2xl w-8 shrink-0 text-center">🖐️</span>
+              <span className="text-sm text-gray-300 leading-snug">{t('open_shoot')}</span>
             </div>
           </div>
+
+          {/* Botón premium */}
           <button
             onClick={startCamera}
-            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-[0_0_30px_rgba(249,115,22,0.55)] min-w-[220px] text-center whitespace-nowrap"
+            className="relative bg-orange-500 hover:bg-orange-400 active:scale-95 text-black font-black text-sm tracking-widest px-14 py-4 rounded-full transition-all min-w-[240px] text-center whitespace-nowrap"
+            style={{ boxShadow: '0 0 35px rgba(249,115,22,0.5), 0 0 70px rgba(249,115,22,0.18)' }}
           >
             {t('activate_camera')}
           </button>
