@@ -32,6 +32,7 @@ export interface Translation {
   game_over: string
   final_pts: string
   play_again: string
+  main_menu: string
   shooting_master: string
   gallery_destroyed: string
   completed_waves: string  // {n} = MAX_PHOTO_WAVES
@@ -94,6 +95,7 @@ export const T: Record<Lang, Translation> = {
     game_over: 'GAME OVER',
     final_pts: 'puntos finales',
     play_again: 'JUGAR DE NUEVO',
+    main_menu: '🏠 MENÚ PRINCIPAL',
     shooting_master: '¡MAESTRO DE TIRO!',
     gallery_destroyed: 'GALERÍA DESTRUIDA',
     completed_waves: '¡COMPLETASTE LAS {n} OLAS!',
@@ -140,6 +142,7 @@ export const T: Record<Lang, Translation> = {
     game_over: 'GAME OVER',
     final_pts: 'final points',
     play_again: 'PLAY AGAIN',
+    main_menu: '🏠 MAIN MENU',
     shooting_master: 'SHOOTING MASTER!',
     gallery_destroyed: 'GALLERY DESTROYED',
     completed_waves: 'YOU COMPLETED ALL {n} WAVES!',
@@ -186,6 +189,7 @@ export const T: Record<Lang, Translation> = {
     game_over: '游戏结束',
     final_pts: '最终分数',
     play_again: '再玩一次',
+    main_menu: '🏠 主菜单',
     shooting_master: '射击大师！',
     gallery_destroyed: '画廊已摧毁',
     completed_waves: '你完成了全部{n}波！',
@@ -232,6 +236,7 @@ export const T: Record<Lang, Translation> = {
     game_over: 'ИГРА ОКОНЧЕНА',
     final_pts: 'финальных очков',
     play_again: 'ИГРАТЬ СНОВА',
+    main_menu: '🏠 ГЛАВНОЕ МЕНЮ',
     shooting_master: 'МАСТЕР СТРЕЛЬБЫ!',
     gallery_destroyed: 'ГАЛЕРЕЯ УНИЧТОЖЕНА',
     completed_waves: 'ТЫ ПРОШЁЛ ВСЕ {n} ВОЛНЫ!',
@@ -278,6 +283,7 @@ export const T: Record<Lang, Translation> = {
     game_over: 'ゲームオーバー',
     final_pts: '最終スコア',
     play_again: 'もう一度プレイ',
+    main_menu: '🏠 メインメニュー',
     shooting_master: '射撃の達人！',
     gallery_destroyed: 'ギャラリー破壊',
     completed_waves: '全{n}ウェーブ制覇！',
@@ -324,6 +330,7 @@ export const T: Record<Lang, Translation> = {
     game_over: 'FIM DE JOGO',
     final_pts: 'pontos finais',
     play_again: 'JOGAR NOVAMENTE',
+    main_menu: '🏠 MENU PRINCIPAL',
     shooting_master: 'MESTRE DO TIRO!',
     gallery_destroyed: 'GALERIA DESTRUÍDA',
     completed_waves: 'VOCÊ COMPLETOU {n} ONDAS!',
@@ -370,6 +377,7 @@ export const T: Record<Lang, Translation> = {
     game_over: 'PARTIE TERMINÉE',
     final_pts: 'points finaux',
     play_again: 'REJOUER',
+    main_menu: '🏠 MENU PRINCIPAL',
     shooting_master: 'MAÎTRE DU TIR !',
     gallery_destroyed: 'GALERIE DÉTRUITE',
     completed_waves: 'TU AS COMPLÉTÉ {n} VAGUES !',
@@ -416,6 +424,7 @@ export const T: Record<Lang, Translation> = {
     game_over: 'SPIEL VORBEI',
     final_pts: 'Endpunkte',
     play_again: 'NOCHMAL SPIELEN',
+    main_menu: '🏠 HAUPTMENÜ',
     shooting_master: 'SCHIESS-MEISTER!',
     gallery_destroyed: 'GALERIE ZERSTÖRT',
     completed_waves: 'DU HAST ALLE {n} WELLEN GESCHAFFT!',
@@ -462,6 +471,7 @@ export const T: Record<Lang, Translation> = {
     game_over: 'OYUN BİTTİ',
     final_pts: 'son puan',
     play_again: 'TEKRAR OYNA',
+    main_menu: '🏠 ANA MENÜ',
     shooting_master: 'NİŞANCI USTASI!',
     gallery_destroyed: 'GALERİ YOK EDİLDİ',
     completed_waves: '{n} DALGAYI TAMAMLADIN!',
@@ -508,6 +518,7 @@ export const T: Record<Lang, Translation> = {
     game_over: 'انتهت اللعبة',
     final_pts: 'النقاط النهائية',
     play_again: 'العب مجددًا',
+    main_menu: '🏠 القائمة الرئيسية',
     shooting_master: 'سيد الرماية!',
     gallery_destroyed: 'المعرض مدمّر',
     completed_waves: 'أكملت {n} موجات!',
@@ -554,6 +565,7 @@ export const T: Record<Lang, Translation> = {
     game_over: 'KONIEC GRY',
     final_pts: 'punktów końcowych',
     play_again: 'ZAGRAJ PONOWNIE',
+    main_menu: '🏠 MENU GŁÓWNE',
     shooting_master: 'MISTRZ STRZELECTWA!',
     gallery_destroyed: 'GALERIA ZNISZCZONA',
     completed_waves: 'UKOŃCZYŁEŚ WSZYSTKIE {n} FALE!',

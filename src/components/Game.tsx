@@ -1411,6 +1411,11 @@ export default function Game() {
     setPhase('playing')
   }, [startLevel])
 
+  const goMenu = useCallback(() => {
+    cancelAnimationFrame(rafRef.current)
+    setPhase('ready')
+  }, [])
+
   // ── Iniciar según modo seleccionado ──────────────────────────────────────
 
   const handlePlay = useCallback(() => {
@@ -1696,6 +1701,12 @@ export default function Game() {
           >
             {t('next_level', { n: Math.min(levelRef.current + 1, LEVELS.length) })}
           </button>
+          <button
+            onClick={goMenu}
+            className="text-gray-400 hover:text-white text-sm font-semibold tracking-wider transition-colors mt-1"
+          >
+            {t('main_menu')}
+          </button>
         </div>
       )}
 
@@ -1712,9 +1723,15 @@ export default function Game() {
           <p className="text-gray-400 mb-10">{t('final_pts')}</p>
           <button
             onClick={startGame}
-            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-[0_0_30px_rgba(249,115,22,0.55)] min-w-[220px] text-center whitespace-nowrap mb-4"
+            className="bg-orange-500 hover:bg-orange-400 text-black font-black text-base px-12 py-4 rounded-2xl transition-all active:scale-95 shadow-[0_0_30px_rgba(249,115,22,0.55)] min-w-[220px] text-center whitespace-nowrap mb-2"
           >
             {t('play_again')}
+          </button>
+          <button
+            onClick={goMenu}
+            className="text-gray-400 hover:text-white text-sm font-semibold tracking-wider transition-colors"
+          >
+            {t('main_menu')}
           </button>
         </div>
       )}
@@ -1798,6 +1815,12 @@ export default function Game() {
               {t('normal_game')}
             </button>
           </div>
+          <button
+            onClick={goMenu}
+            className="text-gray-400 hover:text-white text-sm font-semibold tracking-wider transition-colors mt-4"
+          >
+            {t('main_menu')}
+          </button>
         </div>
       )}
     </div>
