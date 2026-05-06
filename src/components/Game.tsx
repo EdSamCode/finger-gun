@@ -8,7 +8,7 @@ import { T, LANGS, tr, detectLang, type Lang } from '@/lib/i18n'
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type TargetType = 'bottle' | 'can' | 'balloon' | 'photo'
-type GamePhase = 'loading' | 'permission' | 'ready' | 'playing' | 'levelComplete' | 'gameOver' | 'photoLevel' | 'photoLevelEnd' | 'dinoPaywall' | 'dino' | 'dinoOver'
+type GamePhase = 'loading' | 'permission' | 'ready' | 'playing' | 'levelComplete' | 'gameOver' | 'photoLevel' | 'photoLevelEnd'
 
 const PHOTO_RADIUS    = 48   // radio del target circular de foto
 const MAX_PHOTOS      = 8    // máximo de imágenes en modo foto
@@ -559,9 +559,8 @@ function drawPhotoTarget(
 // ── Background offscreen cache — repintado sólo cuando cambia el tamaño ──────
 let _bgCache: HTMLCanvasElement | null = null
 let _bgCacheW = 0, _bgCacheH = 0
-let _bgCachePhoto = false  // cache key: photoMode
 
-function _paintBackground(ctx: CanvasRenderingContext2D, w: number, h: number, photoMode = false) {
+function _paintBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   // Fondo degradado noche
   const bg = ctx.createLinearGradient(0, 0, 0, h)
   bg.addColorStop(0,   '#030010')
@@ -570,96 +569,98 @@ function _paintBackground(ctx: CanvasRenderingContext2D, w: number, h: number, p
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, w, h)
 
-  if (!photoMode) {
-    const shelfY = h * SHELF_Y_RATIO
+  const shelfY = h * SHELF_Y_RATIO
 
-    // Pared de fondo (zona superior)
-    const wall = ctx.createLinearGradient(0, 0, 0, shelfY)
-    wall.addColorStop(0, 'rgba(20,0,40,0)')
-    wall.addColorStop(1, 'rgba(40,10,20,0.4)')
-    ctx.fillStyle = wall
-    ctx.fillRect(0, 0, w, shelfY)
+  // Pared de fondo (zona superior)
+  const wall = ctx.createLinearGradient(0, 0, 0, shelfY)
+  wall.addColorStop(0, 'rgba(20,0,40,0)')
+  wall.addColorStop(1, 'rgba(40,10,20,0.4)')
+  ctx.fillStyle = wall
+  ctx.fillRect(0, 0, w, shelfY)
 
-    // Suelo inferior con perspectiva
-    const floor = ctx.createLinearGradient(0, shelfY, 0, h)
-    floor.addColorStop(0, 'rgba(60,10,10,0.5)')
-    floor.addColorStop(1, 'rgba(10,0,5,0.9)')
-    ctx.fillStyle = floor
-    ctx.fillRect(0, shelfY, w, h - shelfY)
+  // Suelo inferior con perspectiva
+  const floor = ctx.createLinearGradient(0, shelfY, 0, h)
+  floor.addColorStop(0, 'rgba(60,10,10,0.5)')
+  floor.addColorStop(1, 'rgba(10,0,5,0.9)')
+  ctx.fillStyle = floor
+  ctx.fillRect(0, shelfY, w, h - shelfY)
 
-    // Líneas de perspectiva del suelo
-    ctx.strokeStyle = 'rgba(255,30,30,0.07)'
-    ctx.lineWidth = 1
-    const gridSize = 70
-    for (let x = -w; x < w * 2; x += gridSize) {
-      ctx.beginPath()
-      ctx.moveTo(x, shelfY)
-      ctx.lineTo(w / 2 + (x - w / 2) * 3, h + 100)
-      ctx.stroke()
-    }
-    for (let row = 0; row < 6; row++) {
-      const yp = shelfY + (h - shelfY) * (row / 5)
-      ctx.beginPath()
-      ctx.moveTo(0, yp)
-      ctx.lineTo(w, yp)
-      ctx.stroke()
-    }
-
-    // ── Estante de madera ──────────────────────────────────────────
-    const shelfH   = 18
-    const shelfTop = shelfY - shelfH
-
-    const wood = ctx.createLinearGradient(0, shelfTop, 0, shelfY + 4)
-    wood.addColorStop(0,   '#8B5E3C')
-    wood.addColorStop(0.3, '#A0713A')
-    wood.addColorStop(0.6, '#7A4F2A')
-    wood.addColorStop(1,   '#5C3317')
-    ctx.fillStyle = wood
+  // Líneas de perspectiva del suelo
+  ctx.strokeStyle = 'rgba(255,30,30,0.07)'
+  ctx.lineWidth = 1
+  const gridSize = 70
+  for (let x = -w; x < w * 2; x += gridSize) {
     ctx.beginPath()
-    ctx.roundRect(0, shelfTop, w, shelfH + 4, [0, 0, 3, 3])
-    ctx.fill()
-
-    ctx.strokeStyle = 'rgba(255,200,120,0.12)'
-    ctx.lineWidth = 1
-    for (let y = shelfTop + 3; y < shelfY; y += 4) {
-      ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(w, y)
-      ctx.stroke()
-    }
-
-    ctx.strokeStyle = 'rgba(255,220,160,0.45)'
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    ctx.moveTo(0, shelfTop)
-    ctx.lineTo(w, shelfTop)
+    ctx.moveTo(x, shelfY)
+    ctx.lineTo(w / 2 + (x - w / 2) * 3, h + 100)
     ctx.stroke()
-
-    const shadow = ctx.createLinearGradient(0, shelfY + 4, 0, shelfY + 22)
-    shadow.addColorStop(0, 'rgba(0,0,0,0.5)')
-    shadow.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = shadow
-    ctx.fillRect(0, shelfY + 4, w, 18)
-
-    const spotlight = ctx.createRadialGradient(w / 2, shelfY - 40, 20, w / 2, shelfY - 40, w * 0.65)
-    spotlight.addColorStop(0, 'rgba(255,200,100,0.06)')
-    spotlight.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = spotlight
-    ctx.fillRect(0, 0, w, shelfY)
   }
+  for (let row = 0; row < 6; row++) {
+    const yp = shelfY + (h - shelfY) * (row / 5)
+    ctx.beginPath()
+    ctx.moveTo(0, yp)
+    ctx.lineTo(w, yp)
+    ctx.stroke()
+  }
+
+  // ── Estante de madera ──────────────────────────────────────────
+  const shelfH     = 18
+  const shelfTop   = shelfY - shelfH
+
+  // Tabla de madera (gradiente madera)
+  const wood = ctx.createLinearGradient(0, shelfTop, 0, shelfY + 4)
+  wood.addColorStop(0,   '#8B5E3C')
+  wood.addColorStop(0.3, '#A0713A')
+  wood.addColorStop(0.6, '#7A4F2A')
+  wood.addColorStop(1,   '#5C3317')
+  ctx.fillStyle = wood
+  ctx.beginPath()
+  ctx.roundRect(0, shelfTop, w, shelfH + 4, [0, 0, 3, 3])
+  ctx.fill()
+
+  // Veta de madera (líneas horizontales sutiles)
+  ctx.strokeStyle = 'rgba(255,200,120,0.12)'
+  ctx.lineWidth = 1
+  for (let y = shelfTop + 3; y < shelfY; y += 4) {
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(w, y)
+    ctx.stroke()
+  }
+
+  // Borde superior brillante (luz sobre la madera)
+  ctx.strokeStyle = 'rgba(255,220,160,0.45)'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(0, shelfTop)
+  ctx.lineTo(w, shelfTop)
+  ctx.stroke()
+
+  // Sombra debajo del estante
+  const shadow = ctx.createLinearGradient(0, shelfY + 4, 0, shelfY + 22)
+  shadow.addColorStop(0, 'rgba(0,0,0,0.5)')
+  shadow.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = shadow
+  ctx.fillRect(0, shelfY + 4, w, 18)
+
+  // Luz ambiental suave sobre la zona de los targets
+  const spotlight = ctx.createRadialGradient(w / 2, shelfY - 40, 20, w / 2, shelfY - 40, w * 0.65)
+  spotlight.addColorStop(0, 'rgba(255,200,100,0.06)')
+  spotlight.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = spotlight
+  ctx.fillRect(0, 0, w, shelfY)
 }
 
-/** Versión cacheada del fondo — se repinta sólo cuando cambia el tamaño o el modo */
-function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number, _t: number, photoMode = false) {
+/** Versión cacheada del fondo — se repinta en offscreen sólo cuando cambia el tamaño */
+function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number, _t: number) {
   if (typeof document === 'undefined') return
-  if (!_bgCache || _bgCacheW !== w || _bgCacheH !== h || _bgCachePhoto !== photoMode) {
+  if (!_bgCache || _bgCacheW !== w || _bgCacheH !== h) {
     _bgCache = document.createElement('canvas')
     _bgCache.width = w
     _bgCache.height = h
     _bgCacheW = w
     _bgCacheH = h
-    _bgCachePhoto = photoMode
-    _paintBackground(_bgCache.getContext('2d')!, w, h, photoMode)
+    _paintBackground(_bgCache.getContext('2d')!, w, h)
   }
   ctx.drawImage(_bgCache, 0, 0)
 }
@@ -783,45 +784,11 @@ export default function Game() {
   const aimingFramesArr   = useRef<number[]>([0, 0])
   const rafRef          = useRef<number>(0)
   const timeRef         = useRef(0)
-  const handLandmarkerRef  = useRef<any>(null)
-  const poseLandmarkerRef  = useRef<any>(null)
+  const handLandmarkerRef = useRef<any>(null)
   const screenShakeRef    = useRef(0)
   const frameCountRef     = useRef(0)         // para throttle de MediaPipe en mobile
   const prevCanvasSizeRef = useRef({ w: 0, h: 0 }) // para detectar rotación de pantalla
   const photoWaveRef      = useRef(1)         // ola actual en modo foto
-
-  // ── Dino Runner state ──────────────────────────────────────────────────────
-  const dinoRef = useRef({
-    y: 0,           // current Y (bottom of dino feet)
-    vy: 0,          // vertical velocity (negative = up)
-    state: 'running' as 'running' | 'jumping' | 'ducking',
-    score: 0,
-    best: 0,
-    speed: 280,     // pixels per second
-    obstacles: [] as Array<{
-      x: number, y: number, w: number, h: number,
-      type: 'cactus_s' | 'cactus_m' | 'cactus_l' | 'cactus_d' | 'ptero_l' | 'ptero_m' | 'ptero_h'
-    }>,
-    nextObstacleIn: 1.2,  // seconds until next obstacle
-    level: 1,
-    dead: false,
-    groundY: 0,         // set on first frame based on canvas height
-    nightMode: false,
-    clouds: [] as Array<{x: number, y: number, w: number, speed: number}>,
-    frameTime: 0,
-    runFrame: 0,          // animation frame counter
-    photoImg: null as HTMLImageElement | null,
-    // Pose-based controls
-    calibSamples: [] as number[],   // shoulder Y samples for calibration
-    baselineY: -1,                  // calibrated "standing" shoulder Y (-1 = not calibrated)
-    poseY: -1,                      // current detected shoulder Y
-    wasJumpingPose: false,          // prevent multi-trigger
-    poseReady: false,               // pose model loaded
-  })
-  const dinoUnlockedRef    = useRef(false)
-  const dinoCharPhotoRef   = useRef<HTMLImageElement | null>(null)
-  const [dinoCharUrl, setDinoCharUrl]     = useState<string | null>(null)
-  const [isDinoDragging, setIsDinoDragging] = useState(false)
 
   // ── Idioma ────────────────────────────────────────────────────────────────
   const [lang, setLang] = useState<Lang>(() => (typeof window !== 'undefined' ? detectLang() : 'es'))
@@ -842,9 +809,7 @@ export default function Game() {
   const [finalScore, setFinalScore]     = useState(0)
   const [numPhotos,   setNumPhotos]     = useState(0)   // para mostrar botón de modo foto
   const [isDragging,  setIsDragging]   = useState(false)
-  const [selectedMode, setSelectedMode] = useState<'classic' | 'photo' | 'dino'>('classic')
-  const [showMirror,  setShowMirror]   = useState(true)
-  const showMirrorRef = useRef(true)
+  const [selectedMode, setSelectedMode] = useState<'classic' | 'photo'>('classic')
   const isPhotoModeRef                  = useRef(false)  // true cuando estamos en photoLevel
 
   // ── Load MediaPipe ────────────────────────────────────────────────────────
@@ -880,14 +845,6 @@ export default function Game() {
       }
     }
     loadMediaPipe()
-  }, [])
-
-  // ── Check dino unlock on mount ────────────────────────────────────────────
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      dinoUnlockedRef.current = localStorage.getItem('fg_dino_unlocked') === '1'
-    }
   }, [])
 
   // ── Request camera ────────────────────────────────────────────────────────
@@ -1365,11 +1322,11 @@ export default function Game() {
         )
       }
 
-      // Background (sin estante en modo foto)
-      drawBackground(ctx, W, H, timeRef.current, phase === 'photoLevel')
+      // Background
+      drawBackground(ctx, W, H, timeRef.current)
 
       // Camera feed (mirrored, subtle background) — omitido en mobile para rendimiento
-      if (video.readyState >= 2 && !IS_MOBILE && showMirrorRef.current) {
+      if (video.readyState >= 2 && !IS_MOBILE) {
         ctx.save()
         ctx.globalAlpha = 0.13
         ctx.translate(W, 0)
@@ -1446,581 +1403,6 @@ export default function Game() {
     return () => cancelAnimationFrame(rafRef.current)
   }, [phase, handleShot, startLevel])
 
-  // ── Dino game loop ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (phase !== 'dino') return
-
-    const d = dinoRef.current
-    d.dead = false
-    d.score = 0
-    d.speed = 280
-    d.obstacles = []
-    d.nextObstacleIn = 1.2
-    d.level = 1
-    d.nightMode = false
-    d.state = 'running'
-    d.vy = 0
-    d.runFrame = 0
-    d.frameTime = 0
-    d.calibSamples = []
-    d.baselineY = -1
-    d.poseY = -1
-    d.wasJumpingPose = false
-    d.poseReady = false
-
-    // Load PoseLandmarker async
-    ;(async () => {
-      try {
-        const vision = await (await import('@mediapipe/tasks-vision')).FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
-        )
-        const { PoseLandmarker } = await import('@mediapipe/tasks-vision')
-        const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
-        let pl: any
-        try {
-          pl = await PoseLandmarker.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
-            runningMode: 'VIDEO', numPoses: 1,
-            minPoseDetectionConfidence: 0.5,
-            minPosePresenceConfidence: 0.5,
-            minTrackingConfidence: 0.5,
-          })
-        } catch {
-          pl = await PoseLandmarker.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: MODEL_URL, delegate: 'CPU' },
-            runningMode: 'VIDEO', numPoses: 1,
-          })
-        }
-        poseLandmarkerRef.current = pl
-        d.poseReady = true
-      } catch { /* pose failed — game won't start */ }
-    })()
-    // Generate initial clouds
-    d.clouds = Array.from({ length: 5 }, (_, i) => ({
-      x: 100 + i * 220 + Math.random() * 80,
-      y: 40 + Math.random() * 80,
-      w: 60 + Math.random() * 60,
-      speed: 30 + Math.random() * 20,
-    }))
-
-    let lastTs = performance.now()
-
-    const GRAVITY = 1400
-    const JUMP_VEL = -500
-
-    const DINO_W_NORMAL = 44
-    const DINO_H_NORMAL = 52
-    const DINO_W_DUCK   = 58
-    const DINO_H_DUCK   = 30
-    const DINO_X        = 80
-
-    const OBSTACLE_TYPES = [
-      { type: 'cactus_s', w: 18, h: 42 },
-      { type: 'cactus_m', w: 24, h: 56 },
-      { type: 'cactus_l', w: 30, h: 68 },
-      { type: 'cactus_d', w: 52, h: 56 },
-      { type: 'ptero_l',  w: 46, h: 28 },
-      { type: 'ptero_m',  w: 46, h: 28 },
-      { type: 'ptero_h',  w: 46, h: 28 },
-    ]
-
-    const getDinoLevel = (score: number) => {
-      if (score < 500)  return 1
-      if (score < 1200) return 2
-      if (score < 2200) return 3
-      if (score < 3500) return 4
-      return 5
-    }
-
-    const getSpeed = (level: number) => [280, 330, 380, 430, 490][level - 1]
-
-    const spawnObstacle = (W: number, groundY: number, level: number) => {
-      // Level determines which obstacles can appear
-      let pool = OBSTACLE_TYPES.slice(0, Math.min(4 + (level - 1), OBSTACLE_TYPES.length))
-      if (level < 3) pool = pool.filter(o => !o.type.startsWith('ptero'))
-      const template = pool[Math.floor(Math.random() * pool.length)]
-
-      let obstacleY: number
-      if (template.type === 'ptero_l') obstacleY = groundY - template.h - 10  // low: ground level
-      else if (template.type === 'ptero_m') obstacleY = groundY - template.h - 55  // mid: dino body level
-      else if (template.type === 'ptero_h') obstacleY = groundY - template.h - 90  // high: above dino
-      else obstacleY = groundY - template.h  // cacti: on ground
-
-      d.obstacles.push({
-        x: W + 50,
-        y: obstacleY,
-        w: template.w,
-        h: template.h,
-        type: template.type as any,
-      })
-
-      // Spacing: shorter gaps as speed increases
-      const baseGap = 1.8 - level * 0.15
-      d.nextObstacleIn = Math.max(0.7, baseGap + Math.random() * 0.8)
-    }
-
-    const drawCactus = (ctx: CanvasRenderingContext2D, obs: typeof d.obstacles[0], night: boolean) => {
-      const color = night ? '#86efac' : '#15803d'
-      ctx.fillStyle = color
-      if (obs.type === 'cactus_d') {
-        // Double cactus
-        ctx.fillRect(obs.x, obs.y, 18, obs.h)
-        ctx.fillRect(obs.x + 8, obs.y - 12, 8, 16)
-        ctx.fillRect(obs.x + 28, obs.y + 8, 18, obs.h - 8)
-        ctx.fillRect(obs.x + 34, obs.y - 4, 8, 14)
-      } else {
-        // Single cactus
-        ctx.fillRect(obs.x + obs.w/2 - 8, obs.y, 16, obs.h)
-        // Arms
-        if (obs.type !== 'cactus_s') {
-          ctx.fillRect(obs.x, obs.y + obs.h * 0.3, obs.w * 0.45, 10)
-          ctx.fillRect(obs.x, obs.y + obs.h * 0.15, 10, obs.h * 0.2)
-          ctx.fillRect(obs.x + obs.w * 0.55, obs.y + obs.h * 0.4, obs.w * 0.45, 10)
-          ctx.fillRect(obs.x + obs.w - 10, obs.y + obs.h * 0.25, 10, obs.h * 0.2)
-        }
-      }
-    }
-
-    const drawPtero = (ctx: CanvasRenderingContext2D, obs: typeof d.obstacles[0], t: number, night: boolean) => {
-      const color = night ? '#a78bfa' : '#7c3aed'
-      ctx.fillStyle = color
-      const flap = Math.sin(t * 8) > 0
-      const cx = obs.x + obs.w / 2
-      const cy = obs.y + obs.h / 2
-      // Body
-      ctx.fillRect(cx - 10, cy - 6, 20, 12)
-      // Wings
-      if (flap) {
-        // Wings up
-        ctx.beginPath()
-        ctx.moveTo(cx - 10, cy)
-        ctx.lineTo(cx - obs.w/2, cy - 16)
-        ctx.lineTo(cx - 4, cy)
-        ctx.fill()
-        ctx.beginPath()
-        ctx.moveTo(cx + 10, cy)
-        ctx.lineTo(cx + obs.w/2, cy - 16)
-        ctx.lineTo(cx + 4, cy)
-        ctx.fill()
-      } else {
-        // Wings down
-        ctx.beginPath()
-        ctx.moveTo(cx - 10, cy)
-        ctx.lineTo(cx - obs.w/2, cy + 10)
-        ctx.lineTo(cx - 4, cy)
-        ctx.fill()
-        ctx.beginPath()
-        ctx.moveTo(cx + 10, cy)
-        ctx.lineTo(cx + obs.w/2, cy + 10)
-        ctx.lineTo(cx + 4, cy)
-        ctx.fill()
-      }
-      // Beak
-      ctx.fillRect(cx + 10, cy - 3, 10, 5)
-    }
-
-    const drawDino = (ctx: CanvasRenderingContext2D, x: number, y: number, state: string, frame: number, night: boolean, photoImg: HTMLImageElement | null) => {
-      const isDucking = state === 'ducking'
-      const dW = isDucking ? DINO_W_DUCK : DINO_W_NORMAL
-      const dH = isDucking ? DINO_H_DUCK : DINO_H_NORMAL
-
-      if (photoImg) {
-        // Draw user photo as character
-        ctx.save()
-        ctx.beginPath()
-        ctx.roundRect(x, y - dH, dW, dH, 8)
-        ctx.clip()
-        ctx.drawImage(photoImg, x, y - dH, dW, dH)
-        ctx.restore()
-        return
-      }
-
-      const color = night ? '#ffffff' : '#f97316'   // naranja día, blanco noche
-      const glowColor = night ? '#aaddff' : '#ff6a00'
-
-      // Glow neón fluorescente
-      ctx.save()
-      ctx.shadowColor = glowColor
-      ctx.shadowBlur = 18
-      ctx.fillStyle = color
-
-      if (isDucking) {
-        // Ducking shape: long and flat
-        ctx.fillRect(x, y - dH, dW, dH)
-        // Eye
-        ctx.shadowBlur = 0
-        ctx.fillStyle = night ? '#111' : '#7c2d12'
-        ctx.fillRect(x + dW - 14, y - dH + 6, 6, 6)
-        // Tail
-        ctx.shadowBlur = 18
-        ctx.fillStyle = color
-        ctx.fillRect(x - 12, y - dH + 4, 16, 10)
-      } else {
-        // Body
-        ctx.fillRect(x, y - 36, 32, 30)
-        // Head
-        ctx.fillRect(x + 8, y - 52, 26, 22)
-        // Snout
-        ctx.fillRect(x + 28, y - 46, 14, 12)
-        // Eye
-        ctx.shadowBlur = 0
-        ctx.fillStyle = night ? '#111' : '#7c2d12'
-        ctx.fillRect(x + 26, y - 48, 6, 6)
-        ctx.shadowBlur = 18
-        ctx.fillStyle = color
-        // Tail
-        ctx.fillRect(x - 18, y - 28, 22, 14)
-        ctx.fillRect(x - 26, y - 20, 12, 10)
-        // Legs - animated
-        const legOffset = state === 'jumping' ? 0 : (Math.floor(frame / 6) % 2 === 0 ? 4 : -4)
-        ctx.fillRect(x + 6, y - 8, 10, 16)
-        ctx.fillRect(x + 18, y - 8 + legOffset, 10, 16)
-      }
-      ctx.restore()
-    }
-
-    const loop = (ts: number) => {
-      const dt = Math.min((ts - lastTs) / 1000, 0.05)
-      lastTs = ts
-
-      const canvas = canvasRef.current
-      const video  = videoRef.current
-      const hl     = handLandmarkerRef.current
-      if (!canvas || !video || !hl) {
-        rafRef.current = requestAnimationFrame(loop)
-        return
-      }
-
-      // Sync canvas size
-      if (canvas.width !== canvas.offsetWidth || canvas.height !== canvas.offsetHeight) {
-        canvas.width  = canvas.offsetWidth
-        canvas.height = canvas.offsetHeight
-      }
-      const ctx = canvas.getContext('2d')!
-      const W = canvas.width, H = canvas.height
-
-      // Ground Y
-      d.groundY = H - 80
-
-      // Pose detection (body movement controls)
-      frameCountRef.current++
-      const pl = poseLandmarkerRef.current
-      if (pl && video.readyState >= 2 && frameCountRef.current % 2 === 0) {
-        try {
-          const poseResults = pl.detectForVideo(video, ts)
-          const lm = poseResults.landmarks?.[0]
-          if (lm) {
-            const ls = lm[11], rs = lm[12]  // left/right shoulder
-            if (ls && rs) {
-              d.poseY = (ls.y + rs.y) / 2
-            }
-          } else {
-            d.poseY = -1
-          }
-        } catch { /* ignore */ }
-      }
-
-      // Calibration: collect ~50 frames of "standing" shoulder Y
-      if (d.baselineY < 0 && d.poseY > 0) {
-        d.calibSamples.push(d.poseY)
-        if (d.calibSamples.length >= 50) {
-          const sorted = [...d.calibSamples].sort((a, b) => a - b)
-          const mid = sorted.slice(10, 40)
-          d.baselineY = mid.reduce((a, b) => a + b, 0) / mid.length
-        }
-      }
-
-      // Show loading screen until pose model is ready
-      if (!d.poseReady) {
-        ctx.fillStyle = '#111'
-        ctx.fillRect(0, 0, W, H)
-        ctx.fillStyle = '#22c55e'
-        ctx.font = 'bold 16px monospace'
-        ctx.textAlign = 'center'
-        ctx.fillText('Cargando modelo de pose...', W / 2, H / 2)
-        ctx.textAlign = 'left'
-        rafRef.current = requestAnimationFrame(loop)
-        return
-      }
-
-      // Show calibration screen until baseline is established
-      if (d.baselineY < 0) {
-        ctx.fillStyle = '#111'
-        ctx.fillRect(0, 0, W, H)
-        // Draw video preview so user can see themselves
-        if (video.readyState >= 2) {
-          ctx.save()
-          ctx.globalAlpha = 0.35
-          ctx.scale(-1, 1)
-          ctx.drawImage(video, -W, 0, W, H)
-          ctx.restore()
-        }
-        // Overlay instructions
-        ctx.fillStyle = 'rgba(0,0,0,0.5)'
-        ctx.fillRect(W/2 - 180, H/2 - 70, 360, 130)
-        ctx.strokeStyle = 'rgba(34,197,94,0.5)'
-        ctx.lineWidth = 1
-        ctx.strokeRect(W/2 - 180, H/2 - 70, 360, 130)
-        ctx.fillStyle = '#22c55e'
-        ctx.font = 'bold 14px monospace'
-        ctx.textAlign = 'center'
-        ctx.fillText('🧍 PONTE DE PIE — CALIBRANDO...', W / 2, H / 2 - 30)
-        const progress = Math.round((d.calibSamples.length / 50) * 100)
-        ctx.fillStyle = '#374151'
-        ctx.fillRect(W/2 - 100, H/2 - 6, 200, 12)
-        ctx.fillStyle = '#22c55e'
-        ctx.fillRect(W/2 - 100, H/2 - 6, 200 * (progress / 100), 12)
-        ctx.fillStyle = '#86efac'
-        ctx.font = '12px monospace'
-        ctx.fillText(d.poseY < 0 ? 'Asegúrate de estar visible en cámara' : `${progress}%`, W / 2, H / 2 + 24)
-        ctx.fillStyle = 'rgba(255,255,255,0.3)'
-        ctx.font = '11px monospace'
-        ctx.fillText('⬆️ Salta para saltar  •  ⬇️ Agáchate para esquivar', W / 2, H / 2 + 46)
-        ctx.textAlign = 'left'
-        rafRef.current = requestAnimationFrame(loop)
-        return
-      }
-
-      if (!d.dead) {
-        // Pose → jump / duck
-        const JUMP_THRESH = 0.09
-        const DUCK_THRESH = 0.08
-        const isBodyUp   = d.poseY > 0 && d.poseY < d.baselineY - JUMP_THRESH
-        const isBodyDown = d.poseY > 0 && d.poseY > d.baselineY + DUCK_THRESH
-
-        // Jump on rising edge (body going up)
-        if (isBodyUp && !d.wasJumpingPose && d.state !== 'jumping') {
-          d.vy = JUMP_VEL
-          d.state = 'jumping'
-        }
-        d.wasJumpingPose = isBodyUp
-
-        // Duck
-        if (d.state !== 'jumping') {
-          d.state = isBodyDown ? 'ducking' : 'running'
-        }
-
-        // Physics
-        if (d.state === 'jumping' || d.y < d.groundY) {
-          d.vy += GRAVITY * dt
-          d.y += d.vy * dt
-          if (d.y >= d.groundY) {
-            d.y = d.groundY
-            d.vy = 0
-            d.state = 'running'
-          }
-        } else {
-          d.y = d.groundY
-        }
-
-        // Score & level
-        d.score += dt * (d.speed / 5)
-        d.level = getDinoLevel(d.score)
-        d.speed = getSpeed(d.level)
-        d.nightMode = d.level >= 4
-
-        // Spawn obstacles
-        d.nextObstacleIn -= dt
-        if (d.nextObstacleIn <= 0) {
-          spawnObstacle(W, d.groundY, d.level)
-        }
-
-        // Move obstacles
-        d.obstacles = d.obstacles.filter(o => {
-          o.x -= d.speed * dt
-          return o.x + o.w > -20
-        })
-
-        // Collision detection
-        const isDucking = d.state === 'ducking'
-        const dW = isDucking ? DINO_W_DUCK : DINO_W_NORMAL
-        const dH = isDucking ? DINO_H_DUCK : DINO_H_NORMAL
-        const dinoLeft = DINO_X + 4
-        const dinoRight = DINO_X + dW - 4
-        const dinoTop = d.y - dH + 4
-        const dinoBottom = d.y - 4
-
-        for (const obs of d.obstacles) {
-          const obsLeft  = obs.x + 4
-          const obsRight = obs.x + obs.w - 4
-          const obsTop   = obs.y + 4
-          const obsBottom = obs.y + obs.h - 4
-
-          if (dinoRight > obsLeft && dinoLeft < obsRight && dinoBottom > obsTop && dinoTop < obsBottom) {
-            d.dead = true
-            if (d.score > d.best) d.best = d.score
-            break
-          }
-        }
-
-        // Animate run frame
-        d.runFrame++
-
-        // Move clouds
-        d.clouds.forEach(c => {
-          c.x -= c.speed * dt
-          if (c.x + c.w < -20) c.x = W + 50
-        })
-      }
-
-      // ── Draw ──
-      // Background
-      const bgColor = d.nightMode ? '#0a0a0a' : '#111'
-      ctx.fillStyle = bgColor
-      ctx.fillRect(0, 0, W, H)
-
-      // Clouds
-      d.clouds.forEach(c => {
-        ctx.fillStyle = d.nightMode ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.05)'
-        ctx.beginPath()
-        ctx.ellipse(c.x + c.w/2, c.y, c.w/2, 14, 0, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.beginPath()
-        ctx.ellipse(c.x + c.w*0.3, c.y - 8, c.w/3, 12, 0, 0, Math.PI * 2)
-        ctx.fill()
-      })
-
-      // Ground line
-      ctx.fillStyle = d.nightMode ? '#22c55e' : '#374151'
-      ctx.fillRect(0, d.groundY + 2, W, 2)
-      // Ground texture dashes
-      ctx.fillStyle = d.nightMode ? '#166534' : '#1f2937'
-      for (let gx = (-Date.now() * d.speed / 5000) % 60; gx < W; gx += 60) {
-        ctx.fillRect(gx, d.groundY + 8, 30, 2)
-      }
-
-      // Stars in night mode
-      if (d.nightMode) {
-        ctx.fillStyle = 'rgba(255,255,255,0.4)'
-        const starSeed = Math.floor(ts / 8000)
-        for (let s = 0; s < 30; s++) {
-          const sx = ((s * 137 + starSeed * 31) % W)
-          const sy = ((s * 97) % (d.groundY - 20))
-          ctx.fillRect(sx, sy, 2, 2)
-        }
-      }
-
-      // Obstacles
-      d.obstacles.forEach(obs => {
-        if (obs.type.startsWith('cactus')) drawCactus(ctx, obs, d.nightMode)
-        else drawPtero(ctx, obs, ts / 1000, d.nightMode)
-      })
-
-      // Dino — lee la foto directamente del ref en cada frame para capturar cargas tardías
-      drawDino(ctx, DINO_X, d.y, d.state, d.runFrame, d.nightMode, dinoCharPhotoRef.current)
-
-      // Video overlay (semi-transparent, small corner)
-      if (video.readyState >= 2) {
-        ctx.save()
-        ctx.globalAlpha = 0.15
-        const vw = 120, vh = 90
-        ctx.drawImage(video, W - vw - 10, 10, vw, vh)
-        ctx.globalAlpha = 1
-        ctx.restore()
-      }
-
-      // HUD
-      const scoreText = String(Math.floor(d.score)).padStart(5, '0')
-      ctx.font = 'bold 18px monospace'
-      ctx.fillStyle = d.nightMode ? '#86efac' : '#6b7280'
-      ctx.textAlign = 'right'
-      ctx.fillText(scoreText, W - 16, 32)
-      if (d.best > 0) {
-        ctx.fillStyle = d.nightMode ? '#4ade80' : '#374151'
-        ctx.font = '12px monospace'
-        ctx.fillText(`HI ${String(Math.floor(d.best)).padStart(5, '0')}`, W - 100, 32)
-      }
-      ctx.textAlign = 'left'
-
-      // Level badge
-      ctx.fillStyle = d.nightMode ? '#22c55e' : '#374151'
-      ctx.font = 'bold 11px monospace'
-      ctx.fillText(`LVL ${d.level}`, 16, 32)
-
-      // Body state indicator
-      const isUp2   = d.poseY > 0 && d.baselineY > 0 && d.poseY < d.baselineY - 0.09
-      const isDown2 = d.poseY > 0 && d.baselineY > 0 && d.poseY > d.baselineY + 0.08
-      const stateEmoji = isUp2 ? '⬆️' : isDown2 ? '⬇️' : '🧍'
-      const stateLabel = isUp2 ? 'JUMP!' : isDown2 ? 'DUCK!' : 'STAND'
-      ctx.fillStyle = isUp2 ? '#22c55e' : isDown2 ? '#a78bfa' : 'rgba(255,255,255,0.15)'
-      ctx.font = '20px sans-serif'
-      ctx.fillText(stateEmoji, 16, H - 20)
-      ctx.font = '11px monospace'
-      ctx.fillStyle = isUp2 ? '#22c55e' : isDown2 ? '#a78bfa' : 'rgba(255,255,255,0.2)'
-      ctx.fillText(stateLabel, 46, H - 16)
-
-      // Dead overlay
-      if (d.dead) {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'
-        ctx.fillRect(0, 0, W, H)
-        setTimeout(() => {
-          cancelAnimationFrame(rafRef.current)
-          setPhase('dinoOver')
-        }, 600)
-        rafRef.current = requestAnimationFrame(loop)
-        return
-      }
-
-      rafRef.current = requestAnimationFrame(loop)
-    }
-
-    // Initialize dino Y to ground
-    const canvas = canvasRef.current
-    if (canvas) {
-      d.groundY = canvas.offsetHeight - 80
-      d.y = d.groundY
-    }
-
-
-    rafRef.current = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [phase])
-
-  // ── PayPal integration ────────────────────────────────────────────────────
-  useEffect(() => {
-    if (phase !== 'dinoPaywall') return
-
-    const clientId = 'AeVSAFIZt-4SgMp5iF9CrbQW_X0r8aBxzoEQS8_VG59aLaaeCpUV3fKzt_MJr4OoaQU9YAgNtITi6-AQ'
-    const existingScript = document.getElementById('paypal-sdk')
-
-    const renderButton = () => {
-      // pequeño delay para asegurar que el DOM esté listo
-      setTimeout(() => {
-        const container = document.getElementById('paypal-dino-button-container')
-        if (!container || !(window as any).paypal) return
-        container.innerHTML = ''
-        ;(window as any).paypal.Buttons({
-          style: { layout: 'vertical', color: 'gold', shape: 'pill', label: 'pay', height: 55 },
-          createOrder: (_data: any, actions: any) => {
-            return actions.order.create({
-              purchase_units: [{ amount: { value: '2.00', currency_code: 'USD' }, description: 'Finger Gun — Dino Runner Mode' }]
-            })
-          },
-          onApprove: async (_data: any, actions: any) => {
-            await actions.order.capture()
-            localStorage.setItem('fg_dino_unlocked', '1')
-            dinoUnlockedRef.current = true
-            setPhase('dino')
-          },
-          onError: (err: any) => { console.error('PayPal error', err) }
-        }).render('#paypal-dino-button-container')
-      }, 200)
-    }
-
-    if (existingScript && (window as any).paypal) {
-      renderButton()
-    } else {
-      // remove stale script if any
-      existingScript?.remove()
-      const script = document.createElement('script')
-      script.id = 'paypal-sdk'
-      script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&intent=capture`
-      script.onload = renderButton
-      script.onerror = () => console.error('PayPal SDK failed to load')
-      document.head.appendChild(script)
-    }
-  }, [phase])
-
   // ── Level complete screen ─────────────────────────────────────────────────
 
   const goNextLevel = useCallback(() => {
@@ -2028,29 +1410,6 @@ export default function Game() {
     startLevel(next)
     setPhase('playing')
   }, [startLevel])
-
-  const loadDinoCharFile = useCallback((file: File) => {
-    if (!file.type.startsWith('image/')) return
-    const url = URL.createObjectURL(file)
-    setDinoCharUrl(url)
-    const img = new Image()
-    img.onload = () => { dinoCharPhotoRef.current = img }
-    img.src = url
-  }, [])
-
-  const handleDinoCharPhoto = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) loadDinoCharFile(file)
-    e.target.value = ''
-  }, [loadDinoCharFile])
-
-  const handleDinoDragOver  = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDinoDragging(true)  }, [])
-  const handleDinoDragLeave = useCallback((e: React.DragEvent) => { e.stopPropagation(); if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDinoDragging(false) }, [])
-  const handleDinoDrop      = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation(); setIsDinoDragging(false)
-    const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'))
-    if (file) loadDinoCharFile(file)
-  }, [loadDinoCharFile])
 
   const goMenu = useCallback(() => {
     cancelAnimationFrame(rafRef.current)
@@ -2060,15 +1419,6 @@ export default function Game() {
   // ── Iniciar según modo seleccionado ──────────────────────────────────────
 
   const handlePlay = useCallback(() => {
-    if (selectedMode === 'dino') {
-      if (dinoUnlockedRef.current) {
-        cancelAnimationFrame(rafRef.current)
-        setPhase('dino')
-      } else {
-        setPhase('dinoPaywall')
-      }
-      return
-    }
     if (selectedMode === 'photo' && photoImagesRef.current.length > 0) {
       startPhotoLevel()
     } else {
@@ -2142,39 +1492,39 @@ export default function Game() {
           </div>
 
           {/* Emoji con glow orb */}
-          <div className="relative flex items-center justify-center mb-5 sm:mb-7">
-            <div className="absolute w-32 h-32 sm:w-52 sm:h-52 rounded-full bg-orange-500 opacity-15 blur-3xl animate-pulse" />
-            <div className="relative text-6xl sm:text-9xl select-none drop-shadow-2xl">✌️</div>
+          <div className="relative flex items-center justify-center" style={{ marginBottom: '1.75rem' }}>
+            <div className="absolute w-52 h-52 rounded-full bg-orange-500 opacity-15 blur-3xl animate-pulse" />
+            <div className="relative text-9xl select-none drop-shadow-2xl">✌️</div>
           </div>
 
           {/* Título + subtítulo */}
-          <h1 className="text-3xl sm:text-5xl font-black tracking-[0.15em] sm:tracking-[0.18em] mb-1 text-center" style={{
+          <h1 className="text-5xl font-black tracking-[0.18em]" style={{ marginBottom: '0.5rem',
             background: 'linear-gradient(135deg, #fb923c 0%, #fbbf24 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             FINGER GUN
           </h1>
-          <p className="text-gray-400 text-xs sm:text-sm tracking-widest uppercase text-center mb-1">{t('title_sub')}</p>
-          <p className="text-gray-600 text-xs text-center max-w-[260px] leading-relaxed mb-4 sm:mb-7">
+          <p className="text-gray-400 text-sm tracking-widest uppercase text-center" style={{ marginBottom: '0.35rem' }}>{t('title_sub')}</p>
+          <p className="text-gray-600 text-xs text-center max-w-[280px] leading-relaxed" style={{ marginBottom: '1.75rem' }}>
             {t('camera_intro_1')} {t('camera_intro_2')}
           </p>
 
           {/* Card instrucciones */}
-          <div className="max-w-xs w-full rounded-2xl px-4 sm:px-6 py-3 sm:py-5 mb-4 sm:mb-7"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(249,115,22,0.18)' }}>
-            <p className="text-[10px] text-orange-400 font-bold tracking-[0.3em] uppercase mb-3">{t('how_to_play')}</p>
-            <div className="flex items-center gap-3 sm:gap-4 mb-3">
-              <span className="text-xl sm:text-2xl w-7 sm:w-8 shrink-0 text-center">✊</span>
-              <span className="text-xs sm:text-sm text-gray-300 leading-snug">{t('fist_aim')}</span>
+          <div className="max-w-xs w-full rounded-2xl px-6 py-5" style={{ marginBottom: '1.75rem',
+            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(249,115,22,0.18)' }}>
+            <p className="text-[10px] text-orange-400 font-bold tracking-[0.3em] uppercase" style={{ marginBottom: '1rem' }}>{t('how_to_play')}</p>
+            <div className="flex items-center gap-4" style={{ marginBottom: '0.85rem' }}>
+              <span className="text-2xl w-8 shrink-0 text-center">✊</span>
+              <span className="text-sm text-gray-300 leading-snug">{t('fist_aim')}</span>
             </div>
-            <div className="flex items-center gap-3 sm:gap-4">
-              <span className="text-xl sm:text-2xl w-7 sm:w-8 shrink-0 text-center">🖐️</span>
-              <span className="text-xs sm:text-sm text-gray-300 leading-snug">{t('open_shoot')}</span>
+            <div className="flex items-center gap-4">
+              <span className="text-2xl w-8 shrink-0 text-center">🖐️</span>
+              <span className="text-sm text-gray-300 leading-snug">{t('open_shoot')}</span>
             </div>
           </div>
 
           {/* Botón premium */}
           <button
             onClick={startCamera}
-            className="relative bg-orange-500 hover:bg-orange-400 active:scale-95 text-black font-black text-sm tracking-widest px-10 sm:px-14 py-3 sm:py-4 rounded-full transition-all w-full max-w-[280px] text-center whitespace-nowrap"
+            className="relative bg-orange-500 hover:bg-orange-400 active:scale-95 text-black font-black text-sm tracking-widest px-14 py-4 rounded-full transition-all min-w-[240px] text-center whitespace-nowrap"
             style={{ boxShadow: '0 0 35px rgba(249,115,22,0.5), 0 0 70px rgba(249,115,22,0.18)' }}
           >
             {t('activate_camera')}
@@ -2186,9 +1536,9 @@ export default function Game() {
       {phase === 'ready' && (
         <div className="absolute inset-0 flex flex-col bg-black text-white overflow-hidden select-none">
 
-          {/* Header — part of normal flow */}
-          <div className="relative z-10 pt-5 pb-1 text-center shrink-0 pointer-events-none">
-            <p className="text-[10px] tracking-[0.45em] text-gray-600 uppercase mb-0.5">{t('choose_mode')}</p>
+          {/* Header — minimal, floating */}
+          <div className="absolute top-0 left-0 right-0 z-10 pt-7 text-center pointer-events-none">
+            <p className="text-[10px] tracking-[0.45em] text-gray-600 uppercase mb-1">{t('choose_mode')}</p>
             <h1 className="text-xl font-black tracking-[0.2em] text-white">FINGER GUN</h1>
           </div>
           {/* Selector de idioma — top right */}
@@ -2202,7 +1552,7 @@ export default function Game() {
           </div>
 
           {/* Split panels */}
-          <div className="flex-1 min-h-0 flex">
+          <div className="flex-1 flex">
 
             {/* ── CLÁSICO (izquierda) ── */}
             <div
@@ -2331,113 +1681,25 @@ export default function Game() {
                 </div>
               )}
             </div>
-
-            {/* ── DINO RUNNER (derecha extrema) ── */}
-            <div
-              onClick={() => setSelectedMode('dino')}
-              onDragOver={dinoUnlockedRef.current ? handleDinoDragOver : undefined}
-              onDragLeave={dinoUnlockedRef.current ? handleDinoDragLeave : undefined}
-              onDrop={dinoUnlockedRef.current ? handleDinoDrop : undefined}
-              className="relative flex-1 flex flex-col items-center justify-center cursor-pointer transition-all duration-500 overflow-hidden"
-              style={{
-                background: isDinoDragging
-                  ? 'radial-gradient(ellipse at 40% 50%, rgba(34,197,94,0.4) 0%, rgba(0,0,0,1) 72%)'
-                  : selectedMode === 'dino'
-                    ? 'radial-gradient(ellipse at 40% 50%, rgba(34,197,94,0.22) 0%, rgba(0,0,0,1) 72%)'
-                    : 'radial-gradient(ellipse at 40% 50%, rgba(34,197,94,0.05) 0%, rgba(0,0,0,1) 72%)',
-              }}
-            >
-              {/* Drag overlay */}
-              {isDinoDragging && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
-                  <div className="border-2 border-dashed border-green-400 rounded-2xl absolute inset-4 flex flex-col items-center justify-center gap-2">
-                    <span className="text-4xl">📸</span>
-                    <span className="text-green-400 text-sm font-bold tracking-wider">Suelta aquí</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="absolute left-0 top-[20%] bottom-[20%] w-px bg-gray-800/60" />
-              <div
-                className="flex flex-col items-center transition-all duration-500"
-                style={{
-                  opacity:   isDinoDragging ? 0.2 : selectedMode === 'dino' ? 1 : 0.28,
-                  transform: selectedMode === 'dino' ? 'scale(1.08)' : 'scale(0.96)',
-                }}
-              >
-                <div className="text-6xl sm:text-7xl mb-5">🦖</div>
-                <h2
-                  className="text-2xl sm:text-3xl font-black tracking-widest mb-2"
-                  style={{ color: selectedMode === 'dino' ? '#22c55e' : '#6b7280' }}
-                >
-                  {t('dino_mode')}
-                </h2>
-                <p className="text-[11px] tracking-widest text-gray-600 uppercase">{t('dino_desc')}</p>
-
-                {!dinoUnlockedRef.current ? (
-                  <p className="mt-2 text-green-700 text-[11px] tracking-widest">🔒 $2</p>
-                ) : (
-                  /* Foto del personaje — click O drag & drop */
-                  <label
-                    onClick={e => e.stopPropagation()}
-                    className="mt-4 flex flex-col items-center gap-2 cursor-pointer group"
-                  >
-                    <input type="file" accept="image/*" className="hidden" onChange={handleDinoCharPhoto} />
-                    {dinoCharUrl ? (
-                      <div className="relative">
-                        <img src={dinoCharUrl} className="w-14 h-14 rounded-full object-cover border-2 border-green-500 shadow-[0_0_12px_rgba(34,197,94,0.5)]" />
-                        <span className="absolute -bottom-1 -right-1 text-xs bg-green-600 rounded-full w-5 h-5 flex items-center justify-center">✏️</span>
-                      </div>
-                    ) : (
-                      <div className="w-14 h-14 rounded-full border-2 border-dashed border-green-800 flex items-center justify-center group-hover:border-green-500 transition-colors">
-                        <span className="text-2xl">📸</span>
-                      </div>
-                    )}
-                    <span className="text-[10px] text-gray-600 group-hover:text-green-500 tracking-wider transition-colors text-center">
-                      {dinoCharUrl ? t('dino_photo_change') : t('dino_photo_optional')}
-                    </span>
-                  </label>
-                )}
-              </div>
-              {selectedMode === 'dino' && !isDinoDragging && (
-                <div className="absolute bottom-8 flex gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                </div>
-              )}
-            </div>
           </div>
 
-          {/* Botón JUGAR — flujo normal, siempre visible */}
-          <div className="shrink-0 pt-5 pb-12 flex flex-col items-center gap-2">
+          {/* Botón JUGAR — flotante, centrado abajo */}
+          <div className="absolute bottom-0 left-0 right-0 pb-9 flex flex-col items-center gap-2.5 pointer-events-none">
             <button
               onClick={handlePlay}
               disabled={selectedMode === 'photo' && numPhotos === 0}
-              className={`font-black text-sm tracking-[0.2em] px-10 py-4 rounded-full transition-all duration-200 active:scale-95 min-w-[220px] text-center whitespace-nowrap ${
+              style={{ pointerEvents: 'all' }}
+              className={`font-black text-base tracking-[0.25em] px-14 py-4 rounded-full transition-all duration-200 active:scale-95 ${
                 selectedMode === 'photo' && numPhotos === 0
                   ? 'bg-gray-900/80 text-gray-600 cursor-not-allowed backdrop-blur-sm border border-gray-800'
                   : selectedMode === 'photo'
                     ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_40px_rgba(168,85,247,0.45)]'
-                    : selectedMode === 'dino'
-                      ? 'bg-green-600 hover:bg-green-500 text-white shadow-[0_0_40px_rgba(34,197,94,0.45)]'
-                      : 'bg-orange-500 hover:bg-orange-400 text-black shadow-[0_0_40px_rgba(249,115,22,0.45)]'
+                    : 'bg-orange-500 hover:bg-orange-400 text-black shadow-[0_0_40px_rgba(249,115,22,0.45)]'
               }`}
             >
-              {selectedMode === 'photo' && numPhotos === 0
-                ? t('upload_photo')
-                : selectedMode === 'dino' && !dinoUnlockedRef.current
-                  ? `🔓 ${t('dino_unlock_btn')}`
-                  : t('play')}
+              {selectedMode === 'photo' && numPhotos === 0 ? t('upload_photo') : t('play')}
             </button>
             <p className="text-gray-800 text-[9px] tracking-[0.4em] uppercase">{t('space_enter')}</p>
-            {/* Ko-Fi */}
-            <a
-              href="https://ko-fi.com/edwinjsam"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold text-gray-500 hover:text-white border border-gray-800 hover:border-gray-600 bg-black/40 hover:bg-black/60 transition-all duration-200 tracking-wider"
-            >
-              ☕ Donate
-            </a>
           </div>
 
         </div>
@@ -2525,117 +1787,6 @@ export default function Game() {
               <span className="text-purple-400 text-[10px] font-black tracking-wider">MODO<br/>FOTOS</span>
             </button>
           )}
-
-          {/* Botón toggle cámara espejo */}
-          {!IS_MOBILE && (
-            <button
-              onClick={() => {
-                showMirrorRef.current = !showMirrorRef.current
-                setShowMirror(showMirrorRef.current)
-              }}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className={`transition-all active:scale-90 text-white rounded-full w-14 h-14 flex items-center justify-center text-xl shadow-xl ${showMirror ? 'bg-gray-700 hover:bg-gray-600 shadow-gray-700/40' : 'bg-gray-900 hover:bg-gray-800 shadow-black/40 opacity-50'}`}>
-                {showMirror ? '👁️' : '🙈'}
-              </div>
-              <span className="text-gray-400 text-[10px] font-black tracking-wider">{showMirror ? 'CAM' : 'CAM'}</span>
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── Dino Paywall ── */}
-      {phase === 'dinoPaywall' && (
-        <div className="absolute inset-0 flex flex-col items-center text-white overflow-y-auto px-6 py-6"
-          style={{ background: 'radial-gradient(ellipse at 50% 50%, rgba(34,197,94,0.15) 0%, rgba(0,0,0,1) 70%)' }}>
-
-          {/* Spacer top para centrar visualmente cuando cabe */}
-          <div className="flex-1 min-h-0" />
-
-          {/* Dino */}
-          <div className="relative flex items-center justify-center mb-3">
-            <div className="absolute w-32 h-32 rounded-full bg-green-500 opacity-20 blur-3xl animate-pulse" />
-            <div className="relative text-5xl sm:text-7xl select-none">🦖</div>
-          </div>
-
-          {/* Title */}
-          <h1 className="text-2xl sm:text-3xl font-black tracking-widest text-center mb-1"
-            style={{ background: 'linear-gradient(135deg, #22c55e 0%, #86efac 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            DINO RUNNER
-          </h1>
-
-          {/* Price */}
-          <div className="text-6xl sm:text-7xl font-black text-white mb-2" style={{ lineHeight: 1 }}>$2</div>
-
-          {/* Message */}
-          <p className="text-gray-400 text-sm text-center max-w-[280px] leading-relaxed mb-5">
-            {t('dino_support')}
-          </p>
-
-          {/* PayPal button container (SDK) — se muestra si carga */}
-          <div id="paypal-dino-button-container" className="w-full max-w-[300px] mb-3 min-h-[10px]" />
-
-          {/* Ko-Fi payment button — siempre visible */}
-          <a
-            href="https://ko-fi.com/s/7fa66aa69a"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full max-w-[300px] flex items-center justify-center gap-2 px-6 py-4 rounded-full font-black text-sm tracking-wider mb-3 transition-all active:scale-95 whitespace-nowrap"
-            style={{ background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)', color: '#fff', boxShadow: '0 0 40px rgba(34,197,94,0.5)' }}
-          >
-            {t('dino_pay_kofi')}
-          </a>
-
-          {/* Honor unlock — después de pagar */}
-          <button
-            onClick={() => {
-              localStorage.setItem('fg_dino_unlocked', '1')
-              dinoUnlockedRef.current = true
-              setPhase('dino')
-            }}
-            className="text-green-700 hover:text-green-500 text-xs tracking-widest transition-colors mb-4"
-          >
-            {t('dino_already_paid')}
-          </button>
-
-          {/* Back button */}
-          <button
-            onClick={goMenu}
-            className="text-gray-700 hover:text-gray-500 text-xs tracking-widest transition-colors mb-2"
-          >
-            ← {t('main_menu')}
-          </button>
-
-          {/* Spacer bottom */}
-          <div className="flex-1 min-h-0" />
-        </div>
-      )}
-
-      {/* ── Dino Game Over ── */}
-      {phase === 'dinoOver' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-white px-8"
-          style={{ background: 'rgba(0,0,0,0.92)' }}>
-          <div className="text-7xl mb-4">💀</div>
-          <p className="text-green-400 font-black text-2xl tracking-widest mb-6">{t('dino_over')}</p>
-          <div className="flex gap-8 mb-8">
-            <div className="text-center">
-              <p className="text-gray-600 text-xs tracking-widest mb-1">{t('dino_score')}</p>
-              <p className="text-4xl font-black">{Math.floor(dinoRef.current.score)}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-gray-600 text-xs tracking-widest mb-1">{t('dino_best')}</p>
-              <p className="text-4xl font-black text-green-400">{Math.floor(dinoRef.current.best)}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => { cancelAnimationFrame(rafRef.current); setPhase('dino') }}
-            className="bg-green-600 hover:bg-green-500 text-white font-black text-base px-12 py-4 rounded-full transition-all active:scale-95 shadow-[0_0_30px_rgba(34,197,94,0.5)] min-w-[220px] text-center whitespace-nowrap mb-3"
-          >
-            {t('dino_play_again')}
-          </button>
-          <button onClick={goMenu} className="text-gray-400 hover:text-white text-sm font-semibold tracking-wider transition-colors">
-            {t('main_menu')}
-          </button>
         </div>
       )}
 
