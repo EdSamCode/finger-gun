@@ -6,19 +6,19 @@ import type { NextConfig } from "next";
 const cspDirectives = [
   // Solo recursos del propio sitio por defecto
   "default-src 'self'",
-  // Scripts: el sitio + PayPal (para el botón de pago del modo Dino)
-  // 'unsafe-inline' requerido por Next.js para sus scripts internos de hidratación
-  "script-src 'self' 'unsafe-inline' https://www.paypal.com https://www.paypalobjects.com",
+  // Scripts: el sitio + PayPal + MediaPipe CDN
+  // 'unsafe-inline' requerido por Next.js; 'wasm-unsafe-eval' requerido por MediaPipe WASM
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.paypal.com https://www.paypalobjects.com https://cdn.jsdelivr.net",
   // Estilos: solo el propio sitio + inline (Tailwind lo necesita)
   "style-src 'self' 'unsafe-inline'",
   // Imágenes: propio sitio + blob: (fotos subidas) + data: (canvas exports)
   "img-src 'self' blob: data:",
   // Video/audio: blob: para el stream de la cámara
   "media-src 'self' blob:",
-  // Workers: blob: para los Web Workers de MediaPipe (hand detection)
-  "worker-src blob:",
-  // WebAssembly de MediaPipe + conexiones a PayPal
-  "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com",
+  // Workers: blob: para los Web Workers de MediaPipe
+  "worker-src blob: https://cdn.jsdelivr.net",
+  // MediaPipe descarga WASM desde jsdelivr y modelos IA desde googleapis
+  "connect-src 'self' https://www.paypal.com https://www.paypalobjects.com https://cdn.jsdelivr.net https://storage.googleapis.com",
   // Iframes: solo PayPal (para el botón de pago)
   "frame-src https://www.paypal.com https://www.sandbox.paypal.com",
   // Fuentes tipográficas: solo el propio sitio
